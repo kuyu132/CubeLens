@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+  <!-- MainActivity extends ComponentActivity (from AndroidX), not android.app.Activity.
+       This is intentional and correct for Compose apps. Suppress the false-positive. -->
+  <issue id="SimpleLintCheck" severity="ignore" />
+</lint>

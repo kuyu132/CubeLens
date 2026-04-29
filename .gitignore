@@ -1,0 +1,28 @@
+.DS_Store
+.idea/
+*.iml
+.android/
+.gradle/
+.gradle-codex/
+build/
+captures/
+local.properties
+
+**/build/
+**/.cxx/
+**/.externalNativeBuild/
+
+# Kotlin
+*.class
+*.jar
+*.war
+*.ear
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+*.keystore
+*.jks
+
