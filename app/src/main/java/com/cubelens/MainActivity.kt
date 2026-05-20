@@ -6,6 +6,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import com.cubelens.data.PreferencesManager
+import com.cubelens.data.ThemeMode
 import com.cubelens.ui.CubeLensApp
 import com.cubelens.ui.theme.CubeLensTheme
 import com.cubelens.viewmodel.CaptureViewModel
@@ -18,7 +23,10 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setContent {
-      CubeLensTheme {
+      val prefs = remember { PreferencesManager(this) }
+      val themeMode by prefs.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+
+      CubeLensTheme(themeMode = themeMode) {
         Surface(color = MaterialTheme.colorScheme.background) {
           CubeLensApp(
             captureViewModel = captureViewModel,
@@ -30,4 +38,3 @@ class MainActivity : ComponentActivity() {
     }
   }
 }
-

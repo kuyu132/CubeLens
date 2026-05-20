@@ -72,6 +72,7 @@ fun CaptureScreen(
   viewModel: CaptureViewModel,
   onReview: () -> Unit,
   modifier: Modifier = Modifier,
+  lensFacing: Int = CameraSelector.LENS_FACING_BACK,
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   val context = LocalContext.current
@@ -195,6 +196,7 @@ fun CaptureScreen(
         CameraPreviewWithCapture(
           faceLabel = state.currentFace.label,
           enabled = !state.isProcessing,
+          lensFacing = lensFacing,
           onPhotoSaved = { path ->
             val bmp = BitmapUtils.decodeUpright(path) ?: return@CameraPreviewWithCapture
             viewModel.setCapturedFaceBitmap(state.currentFace, bmp, path)
@@ -263,6 +265,7 @@ fun CaptureScreen(
 private fun CameraPreviewWithCapture(
   faceLabel: String,
   enabled: Boolean,
+  lensFacing: Int,
   onPhotoSaved: (String) -> Unit,
 ) {
   val context = LocalContext.current
@@ -289,7 +292,7 @@ private fun CameraPreviewWithCapture(
     }
     provider.bindToLifecycle(
       lifecycleOwner,
-      CameraSelector.DEFAULT_BACK_CAMERA,
+      CameraSelector.Builder().requireLensFacing(lensFacing).build(),
       preview,
       imageCapture,
     )

@@ -21,6 +21,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -36,10 +38,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.cubelens.R
 import com.cubelens.data.SolveRecord
 import com.cubelens.ui.timer.formatTime
 import com.cubelens.util.calculateAoN
@@ -55,6 +60,7 @@ fun HistoryScreen(
   onDelete: (SolveRecord) -> Unit,
   onDeleteAll: () -> Unit,
   modifier: Modifier = Modifier,
+  onSettings: () -> Unit = {},
 ) {
   var showDeleteAllDialog by remember { mutableStateOf(false) }
   var selectedRecord by remember { mutableStateOf<SolveRecord?>(null) }
@@ -68,6 +74,12 @@ fun HistoryScreen(
       TopAppBar(
         title = { Text("History") },
         actions = {
+          IconButton(onClick = onSettings) {
+            Icon(
+              imageVector = ImageVector.vectorResource(R.drawable.ic_settings),
+              contentDescription = "Settings",
+            )
+          }
           if (records.isNotEmpty()) {
             TextButton(onClick = { showDeleteAllDialog = true }) {
               Text("Clear All", color = MaterialTheme.colorScheme.error)
