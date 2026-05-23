@@ -15,20 +15,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,13 +42,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cubelens.R
 import com.cubelens.data.SolvePenalty
 import com.cubelens.data.SolveRecord
+import com.cubelens.data.contestMillisForStats
 import com.cubelens.ui.timer.formatTime
 import com.cubelens.util.aoFromRecords
 import com.cubelens.util.bestFromRecords
@@ -59,9 +69,14 @@ fun HistoryScreen(
   onDelete: (SolveRecord) -> Unit,
   onDeleteAll: () -> Unit,
   modifier: Modifier = Modifier,
+  onSettings: () -> Unit = {},
 ) {
   var showDeleteAllDialog by remember { mutableStateOf(false) }
-  var detailRecord by remember { mutableStateOf<SolveRecord?>(null) }
+  var selectedRecord by remember { mutableStateOf<SolveRecord?>(null) }
+  var showDeleteConfirm by remember { mutableStateOf(false) }
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  var filterType by remember { mutableStateOf(FilterType.ALL) }
+  var sortNewestFirst by remember { mutableStateOf(true) }
   val context = LocalContext.current
 
   Scaffold(
@@ -69,6 +84,12 @@ fun HistoryScreen(
       TopAppBar(
         title = { Text(stringResource(R.string.history_title)) },
         actions = {
+          IconButton(onClick = onSettings) {
+            Icon(
+              imageVector = ImageVector.vectorResource(R.drawable.ic_settings),
+              contentDescription = stringResource(R.string.menu_settings),
+            )
+          }
           if (records.isNotEmpty()) {
             Row(
               horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -80,7 +101,7 @@ fun HistoryScreen(
                   val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.history_export_chooser))
-                    putExtra(Intent.EXTRA_TEXT, csv)
+                    putExtra(Intent.EXTRA_TEXT,  csv)
                   }
                   context.startActivity(
                     Intent.createChooser(intent, context.getString(R.string.history_export_chooser)),
@@ -124,6 +145,16 @@ fun HistoryScreen(
       return@Scaffold
     }
 
+    val filteredRecords = remember(records, filterType, sortNewestFirst) {
+      val filtered = when (filterType) {
+        FilterType.ALL -> records
+        FilterType.TIMED -> records.filter { it.moveCount == 0 || it.solution.isBlank() }
+        FilterType.SOLVED -> records.filter { it.moveCount > 0 && it.solution.isNotBlank() }
+      }
+      if (sortNewestFirst) filtered.sortedByDescending { it.date }
+      else filtered.sortedBy { it.contestMillisForStats() }
+    }
+
     LazyColumn(
       modifier = Modifier
         .fillMaxSize()
@@ -138,16 +169,100 @@ fun HistoryScreen(
         StatsPanel(records = records)
       }
 
-      items(records, key = { it.id }) { record ->
-        SolveRecordCard(
-          record = record,
-          onOpenDetail = { detailRecord = record },
-          onDelete = { onDelete(record) },
+      item {
+        FilterSortRow(
+          filterType = filterType,
+          onFilterChange = { filterType = it },
+          sortNewestFirst = sortNewestFirst,
+          onSortToggle = { sortNewestFirst = !sortNewestFirst },
         )
+      }
+
+      if (filteredRecords.isEmpty()) {
+        item {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+          ) {
+            Text(
+              stringResource(R.string.history_no_filter_match),
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+        }
+      } else {
+        items(filteredRecords, key = { it.id }) { record ->
+          SolveRecordCard(
+            record = record,
+            onClick = { selectedRecord = record },
+            onDelete = {
+              selectedRecord = record
+              showDeleteConfirm = true
+            },
+          )
+        }
       }
 
       item { Spacer(Modifier.height(16.dp)) }
     }
+  }
+
+  if (selectedRecord != null && !showDeleteConfirm) {
+    ModalBottomSheet(
+      onDismissRequest = { selectedRecord = null },
+      sheetState = sheetState,
+      containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+      HistoryDetailSheet(
+        record = selectedRecord!!,
+        onDismiss = { selectedRecord = null },
+        onDelete = {
+          onDelete(selectedRecord!!)
+          selectedRecord = null
+        },
+      )
+    }
+  }
+
+  if (showDeleteConfirm && selectedRecord != null) {
+    AlertDialog(
+      onDismissRequest = { showDeleteConfirm = false; selectedRecord = null },
+      title = { Text(stringResource(R.string.history_delete_title)) },
+      text = {
+        Column {
+          Text(stringResource(R.string.history_delete_body))
+          selectedRecord?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(
+              text = recordTimeText(it),
+              fontFamily = FontFamily.Monospace,
+              fontWeight = FontWeight.Bold,
+            )
+            if (it.moveCount > 0) {
+              Text(stringResource(R.string.history_moves_only, it.moveCount))
+            }
+          }
+        }
+      },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            selectedRecord?.let { onDelete(it) }
+            showDeleteConfirm = false
+            selectedRecord = null
+          },
+        ) {
+          Text(stringResource(R.string.history_delete), color = MaterialTheme.colorScheme.error)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showDeleteConfirm = false; selectedRecord = null }) {
+          Text(stringResource(R.string.history_clear_cancel))
+        }
+      },
+    )
   }
 
   if (showDeleteAllDialog) {
@@ -172,80 +287,6 @@ fun HistoryScreen(
       },
     )
   }
-
-  detailRecord?.let { record ->
-    val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
-    val dateStr = dateFormat.format(Date(record.date))
-    val movesLine = stringResource(R.string.history_moves_date, record.moveCount, dateStr)
-
-    AlertDialog(
-      onDismissRequest = { detailRecord = null },
-      title = { Text(stringResource(R.string.history_detail_title)) },
-      text = {
-        Column(
-          modifier = Modifier.verticalScroll(rememberScrollState()),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Text(movesLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text(stringResource(R.string.history_detail_scramble), style = MaterialTheme.typography.labelMedium)
-          Text(
-            record.scramble.ifBlank { stringResource(R.string.history_detail_none) },
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace,
-          )
-          Text(stringResource(R.string.history_detail_solution), style = MaterialTheme.typography.labelMedium)
-          Text(
-            record.solution.ifBlank { stringResource(R.string.history_detail_none) },
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace,
-          )
-          Text(
-            stringResource(R.string.timer_title) + ": " + recordTimeText(record),
-            style = MaterialTheme.typography.bodyMedium,
-          )
-        }
-      },
-      confirmButton = {
-        Row {
-          TextButton(
-            onClick = {
-              val clip = buildString {
-                appendLine(recordTimePlain(context, record))
-                appendLine(record.scramble)
-                if (record.solution.isNotBlank()) appendLine(record.solution)
-              }.trim()
-              val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-              cm.setPrimaryClip(ClipData.newPlainText("solve", clip))
-              Toast.makeText(context, context.getString(R.string.history_detail_copied), Toast.LENGTH_SHORT).show()
-            },
-          ) {
-            Text(stringResource(R.string.history_detail_copy))
-          }
-          TextButton(
-            onClick = {
-              val text = buildString {
-                appendLine(recordTimePlain(context, record))
-                appendLine(record.scramble)
-                if (record.solution.isNotBlank()) appendLine(record.solution)
-              }
-              val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, text.trim())
-              }
-              context.startActivity(Intent.createChooser(intent, context.getString(R.string.solving_share_chooser)))
-            },
-          ) {
-            Text(stringResource(R.string.history_detail_share))
-          }
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { detailRecord = null }) {
-          Text(stringResource(R.string.history_detail_close))
-        }
-      },
-    )
-  }
 }
 
 private fun recordTimePlain(context: Context, record: SolveRecord): String = when (record.penalty) {
@@ -264,7 +305,7 @@ private fun recordTimeText(record: SolveRecord): String = when (record.penalty) 
 @Composable
 private fun SolveRecordCard(
   record: SolveRecord,
-  onOpenDetail: () -> Unit,
+  onClick: () -> Unit,
   onDelete: () -> Unit,
 ) {
   val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
@@ -272,7 +313,9 @@ private fun SolveRecordCard(
   val metaLine = stringResource(R.string.history_moves_date, record.moveCount, dateStr)
 
   Card(
-    modifier = Modifier.fillMaxWidth(),
+    modifier = Modifier
+      .fillMaxWidth()
+      .clickable(onClick = onClick),
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ),
@@ -284,11 +327,7 @@ private fun SolveRecordCard(
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Column(
-        modifier = Modifier
-          .weight(1f)
-          .clickable(onClick = onOpenDetail),
-      ) {
+      Column(modifier = Modifier.weight(1f)) {
         Text(
           text = recordTimeText(record),
           style = MaterialTheme.typography.titleLarge,
@@ -317,6 +356,165 @@ private fun SolveRecordCard(
         Text(stringResource(R.string.history_delete), color = MaterialTheme.colorScheme.error)
       }
     }
+  }
+}
+
+@Composable
+private fun HistoryDetailSheet(
+  record: SolveRecord,
+  onDismiss: () -> Unit,
+  onDelete: () -> Unit,
+) {
+  val context = LocalContext.current
+  val dateFormat = remember { SimpleDateFormat("MMM dd yyyy, HH:mm:ss", Locale.getDefault()) }
+  val scrollState = rememberScrollState()
+
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = 20.dp)
+      .padding(bottom = 32.dp)
+      .verticalScroll(scrollState),
+  ) {
+    Text(
+      text = recordTimeText(record),
+      style = MaterialTheme.typography.displaySmall,
+      fontFamily = FontFamily.Monospace,
+      color = if (record.penalty == SolvePenalty.DNF) {
+        MaterialTheme.colorScheme.error
+      } else {
+        MaterialTheme.colorScheme.primary
+      },
+    )
+    Text(
+      text = dateFormat.format(Date(record.date)),
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Spacer(Modifier.height(20.dp))
+    HorizontalDivider()
+    Spacer(Modifier.height(16.dp))
+
+    if (record.scramble.isNotBlank()) {
+      DetailSection(
+        title = stringResource(R.string.history_detail_scramble),
+        content = record.scramble,
+      )
+      Spacer(Modifier.height(16.dp))
+    }
+
+    if (record.solution.isNotBlank()) {
+      DetailSection(
+        title = stringResource(R.string.history_detail_solution) + " (${record.moveCount})",
+        content = record.solution,
+      )
+      Spacer(Modifier.height(16.dp))
+    }
+
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+      DetailStat(label = stringResource(R.string.timer_title), value = recordTimeText(record))
+      DetailStat(label = stringResource(R.string.history_stat_moves), value = "${record.moveCount}")
+      DetailStat(
+        label = stringResource(R.string.history_stat_type),
+        value = if (record.moveCount > 0 && record.solution.isNotBlank()) {
+          stringResource(R.string.history_filter_solved)
+        } else {
+          stringResource(R.string.history_filter_timed)
+        },
+      )
+    }
+
+    Spacer(Modifier.height(24.dp))
+
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      Button(
+        onClick = {
+          val clip = buildString {
+            appendLine(recordTimePlain(context, record))
+            appendLine(record.scramble)
+            if (record.solution.isNotBlank()) appendLine(record.solution)
+          }.trim()
+          val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+          cm.setPrimaryClip(ClipData.newPlainText("solve", clip))
+          Toast.makeText(context, context.getString(R.string.history_detail_copied), Toast.LENGTH_SHORT).show()
+        },
+        modifier = Modifier.weight(1f),
+      ) {
+        Text(stringResource(R.string.history_detail_copy))
+      }
+      Button(
+        onClick = {
+          val shareText = buildString {
+            appendLine("🧊 CubeLens")
+            if (record.scramble.isNotBlank()) appendLine("Scramble: ${record.scramble}")
+            if (record.solution.isNotBlank()) {
+              appendLine("Solution: ${record.solution} (${record.moveCount} moves)")
+            }
+            appendLine("Time: ${recordTimePlain(context, record)}")
+          }.trimEnd()
+          val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, shareText)
+          }
+          context.startActivity(Intent.createChooser(intent, context.getString(R.string.solving_share_chooser)))
+        },
+        modifier = Modifier.weight(1f),
+      ) {
+        Text(stringResource(R.string.history_detail_share))
+      }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    OutlinedButton(
+      onClick = onDelete,
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Text(stringResource(R.string.history_delete), color = MaterialTheme.colorScheme.error)
+    }
+  }
+}
+
+@Composable
+private fun DetailSection(title: String, content: String) {
+  Column {
+    Text(
+      text = title,
+      style = MaterialTheme.typography.labelMedium,
+      color = MaterialTheme.colorScheme.primary,
+      fontWeight = FontWeight.SemiBold,
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+      text = content,
+      style = MaterialTheme.typography.bodyMedium,
+      fontFamily = FontFamily.Monospace,
+      color = MaterialTheme.colorScheme.onSurface,
+    )
+  }
+}
+
+@Composable
+private fun DetailStat(label: String, value: String) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Text(
+      text = value,
+      style = MaterialTheme.typography.titleSmall,
+      fontFamily = FontFamily.Monospace,
+      color = MaterialTheme.colorScheme.primary,
+    )
+    Text(
+      text = label,
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
   }
 }
 
@@ -407,4 +605,51 @@ private fun buildExportCsv(records: List<SolveRecord>): String {
       .appendLine()
   }
   return sb.toString()
+}
+
+private enum class FilterType { ALL, TIMED, SOLVED }
+
+@Composable
+private fun FilterSortRow(
+  filterType: FilterType,
+  onFilterChange: (FilterType) -> Unit,
+  sortNewestFirst: Boolean,
+  onSortToggle: () -> Unit,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+      FilterType.entries.forEach { type ->
+        val selected = type == filterType
+        TextButton(onClick = { onFilterChange(type) }) {
+          Text(
+            text = when (type) {
+              FilterType.ALL -> stringResource(R.string.history_filter_all)
+              FilterType.TIMED -> stringResource(R.string.history_filter_timed)
+              FilterType.SOLVED -> stringResource(R.string.history_filter_solved)
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+          )
+        }
+      }
+    }
+
+    TextButton(onClick = onSortToggle) {
+      Text(
+        text = if (sortNewestFirst) {
+          stringResource(R.string.history_sort_newest)
+        } else {
+          stringResource(R.string.history_sort_fastest)
+        },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
 }

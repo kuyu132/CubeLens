@@ -26,8 +26,9 @@ class ColorDetector {
   private fun sample3x3(bitmap: Bitmap): Pair<List<CubeColor>, List<Float>> {
     val w = bitmap.width
     val h = bitmap.height
-    val padding = (w * 0.12f).toInt()
+    val padding = (w * 0.08f).toInt()  // tighter padding since we sample regions
     val cell = (w - 2 * padding) / 3f
+    val regionRadius = (cell * 0.18f).toInt().coerceAtLeast(2)  // sample ~36% of sticker width
     val hsv = FloatArray(3)
 
     val samples = ArrayList<FloatArray>(9)
@@ -38,8 +39,10 @@ class ColorDetector {
       for (col in 0..2) {
         val cx = (padding + (col + 0.5f) * cell).toInt().coerceIn(0, w - 1)
         val cy = (padding + (row + 0.5f) * cell).toInt().coerceIn(0, h - 1)
-        val rgb = bitmap.getPixel(cx, cy)
-        Color.RGBToHSV(Color.red(rgb), Color.green(rgb), Color.blue(rgb), hsv)
+
+        // Sample a region of pixels around sticker center, collect median HSV
+        val (medH, medS, medV) = sampleRegionMedian(bitmap, cx, cy, regionRadius)
+        hsv[0] = medH; hsv[1] = medS; hsv[2] = medV
         samples.add(hsv.clone())
       }
     }
@@ -58,6 +61,43 @@ class ColorDetector {
       conf.add(result.second)
     }
     return colors to conf
+  }
+
+  /**
+   * Samples a square region of pixels around (cx, cy) with given radius,
+   * computes median H, S, V values to reduce noise from single-pixel anomalies.
+   */
+  private fun sampleRegionMedian(bitmap: Bitmap, cx: Int, cy: Int, radius: Int): Triple<Float, Float, Float> {
+    val left = (cx - radius).coerceAtLeast(0)
+    val top = (cy - radius).coerceAtLeast(0)
+    val right = (cx + radius).coerceAtMost(bitmap.width - 1)
+    val bottom = (cy + radius).coerceAtMost(bitmap.height - 1)
+
+    val count = (right - left + 1) * (bottom - top + 1)
+    if (count <= 0) return Triple(0f, 0f, 0f)
+
+    val hues = FloatArray(count)
+    val sats = FloatArray(count)
+    val vals = FloatArray(count)
+    val hsv = FloatArray(3)
+
+    var idx = 0
+    for (y in top..bottom) {
+      for (x in left..right) {
+        val rgb = bitmap.getPixel(x, y)
+        Color.RGBToHSV(Color.red(rgb), Color.green(rgb), Color.blue(rgb), hsv)
+        hues[idx] = normalizeHue(hsv[0])
+        sats[idx] = hsv[1]
+        vals[idx] = hsv[2]
+        idx++
+      }
+    }
+
+    hues.sort()
+    sats.sort()
+    vals.sort()
+
+    return Triple(hues[count / 2], sats[count / 2], vals[count / 2])
   }
 
   private fun classify(h: Float, sat: Float, v: Float, adaptiveWhiteV: Float): Pair<CubeColor, Float> {

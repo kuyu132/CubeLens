@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import com.cubelens.data.ThemeMode
 
 private val LightColors = lightColorScheme(
   primary = md_theme_light_primary,
@@ -34,14 +35,18 @@ private val DarkColors = darkColorScheme(
 
 @Composable
 fun CubeLensTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
+  themeMode: ThemeMode = ThemeMode.SYSTEM,
   content: @Composable () -> Unit,
 ) {
-  val colors = if (darkTheme) DarkColors else LightColors
+  val isDark = when (themeMode) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+  }
+  val colors = if (isDark) DarkColors else LightColors
   MaterialTheme(
     colorScheme = colors,
     typography = Typography,
     content = content,
   )
 }
-

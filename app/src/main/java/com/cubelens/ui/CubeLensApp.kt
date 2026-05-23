@@ -2,6 +2,7 @@ package com.cubelens.ui
 
 import android.content.Context
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -27,13 +29,12 @@ import com.cubelens.ui.capture.CaptureScreen
 import com.cubelens.ui.history.HistoryScreen
 import com.cubelens.ui.onboarding.OnboardingScreen
 import com.cubelens.ui.review.ReviewScreen
-import com.cubelens.ui.solving.SolvingScreen
 import com.cubelens.ui.settings.SettingsScreen
+import com.cubelens.ui.solving.SolvingScreen
 import com.cubelens.ui.timer.TimerScreen
 import com.cubelens.viewmodel.CaptureViewModel
 import com.cubelens.viewmodel.SolveViewModel
 import kotlinx.coroutines.launch
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun CubeLensApp(
@@ -45,6 +46,7 @@ fun CubeLensApp(
   val prefs = remember { PreferencesManager(context) }
   val scope = rememberCoroutineScope()
   val onboardingCompleted by prefs.onboardingCompleted.collectAsState(initial = null)
+  val lensFacing by prefs.cameraLensFacing.collectAsState(initial = 1)
 
   // Wait for onboarding state
   if (onboardingCompleted == null) return
@@ -74,6 +76,7 @@ fun CubeLensApp(
         captureViewModel = captureViewModel,
         navController = navController,
         onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
+        lensFacing = lensFacing,
       )
     }
 
@@ -99,21 +102,6 @@ fun CubeLensApp(
       )
     }
 
-    composable(Routes.SETTINGS) {
-      SettingsScreen(
-        prefs = prefs,
-        onBack = { navController.popBackStack() },
-        onReplayOnboarding = {
-          scope.launch {
-            prefs.setOnboardingCompleted(false)
-            navController.navigate(Routes.ONBOARDING) {
-              popUpTo(BottomTab.SOLVE.route) { inclusive = true }
-            }
-          }
-        },
-      )
-    }
-
     composable(BottomTab.HISTORY.route) {
       HistoryTabScreen(
         selectedTab = BottomTab.HISTORY,
@@ -125,6 +113,7 @@ fun CubeLensApp(
         onDeleteAll = {
           scope.launch { solveDao.deleteAll() }
         },
+        onSettings = { navController.navigate(Routes.SETTINGS) },
       )
     }
 
@@ -156,6 +145,30 @@ fun CubeLensApp(
         },
       )
     }
+
+    composable(Routes.SETTINGS) {
+      SettingsScreen(
+        prefs = prefs,
+        onBack = { navController.popBackStack() },
+        onReplayOnboarding = {
+          scope.launch {
+            prefs.setOnboardingCompleted(false)
+            navController.navigate(Routes.ONBOARDING) {
+              popUpTo(BottomTab.SOLVE.route) { inclusive = true }
+            }
+          }
+        },
+        onClearAllData = {
+          scope.launch {
+            solveDao.deleteAll()
+            prefs.setOnboardingCompleted(false)
+            navController.navigate(Routes.ONBOARDING) {
+              popUpTo(0) { inclusive = true }
+            }
+          }
+        },
+      )
+    }
   }
 }
 
@@ -166,6 +179,7 @@ private fun MainTabScreen(
   captureViewModel: CaptureViewModel,
   navController: androidx.navigation.NavHostController,
   onNavigateToSettings: () -> Unit,
+  lensFacing: Int,
 ) {
   Scaffold(
     bottomBar = {
@@ -177,10 +191,12 @@ private fun MainTabScreen(
       onReview = { navController.navigate(Routes.REVIEW) },
       onNavigateToSettings = onNavigateToSettings,
       modifier = Modifier.padding(innerPadding),
+      lensFacing = lensFacing,
     )
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimerTabScreen(
   selectedTab: BottomTab,
@@ -201,6 +217,7 @@ private fun TimerTabScreen(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HistoryTabScreen(
   selectedTab: BottomTab,
@@ -208,6 +225,7 @@ private fun HistoryTabScreen(
   records: List<SolveRecord>,
   onDelete: (SolveRecord) -> Unit,
   onDeleteAll: () -> Unit,
+  onSettings: () -> Unit,
 ) {
   Scaffold(
     bottomBar = {
@@ -219,6 +237,7 @@ private fun HistoryTabScreen(
       onDelete = onDelete,
       onDeleteAll = onDeleteAll,
       modifier = Modifier.padding(innerPadding),
+      onSettings = onSettings,
     )
   }
 }

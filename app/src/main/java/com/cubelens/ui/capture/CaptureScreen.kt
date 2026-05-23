@@ -12,6 +12,8 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.exifinterface.media.ExifInterface
+import java.io.FileOutputStream
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -27,6 +29,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -71,6 +75,7 @@ fun CaptureScreen(
   onReview: () -> Unit,
   onNavigateToSettings: () -> Unit,
   modifier: Modifier = Modifier,
+  lensFacing: Int = CameraSelector.LENS_FACING_BACK,
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -182,12 +187,24 @@ fun CaptureScreen(
             }
           }
         }
+
+        // 3D cube preview — shows U, F, R faces with scanned/unspecified colors
+        if (state.scans.isNotEmpty()) {
+          Cube3DPreview(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(150.dp)
+              .padding(horizontal = 12.dp, vertical = 6.dp),
+            scans = state.scans,
+          )
+        }
       }
 
       Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
         CameraPreviewWithCapture(
           faceLabel = state.currentFace.label,
           enabled = !state.isProcessing,
+          lensFacing = lensFacing,
           onPhotoSaved = { path ->
             val bmp = BitmapUtils.decodeUpright(path) ?: return@CameraPreviewWithCapture
             viewModel.setCapturedFaceBitmap(state.currentFace, bmp, path)
@@ -209,15 +226,28 @@ fun CaptureScreen(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(16.dp),
+          .padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        Button(
-          onClick = { viewModel.goPrev() },
-          enabled = state.currentFaceIndex > 0 && !state.isProcessing,
+        // Undo + Prev on the left
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
         ) {
-          Text(stringResource(R.string.capture_prev))
+          OutlinedButton(
+            onClick = { viewModel.undo() },
+            enabled = state.canUndo && !state.isProcessing,
+          ) {
+            Text("↩")
+          }
+
+          Button(
+            onClick = { viewModel.goPrev() },
+            enabled = state.currentFaceIndex > 0 && !state.isProcessing,
+          ) {
+            Text(stringResource(R.string.capture_prev))
+          }
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -243,6 +273,7 @@ fun CaptureScreen(
 private fun CameraPreviewWithCapture(
   faceLabel: String,
   enabled: Boolean,
+  lensFacing: Int,
   onPhotoSaved: (String) -> Unit,
 ) {
   val context = LocalContext.current
@@ -269,7 +300,7 @@ private fun CameraPreviewWithCapture(
     }
     provider.bindToLifecycle(
       lifecycleOwner,
-      CameraSelector.DEFAULT_BACK_CAMERA,
+      CameraSelector.Builder().requireLensFacing(lensFacing).build(),
       preview,
       imageCapture,
     )
@@ -287,7 +318,16 @@ private fun CameraPreviewWithCapture(
       CaptureButton(
         enabled = enabled,
         onClick = {
-          takePhoto(context, imageCapture, executor, onPhotoSaved)
+          // Capture grid region from the actual image based on preview dimensions.
+          // GridOverlay draws a square of side = minOf(w,h) * 0.74 centered in the preview.
+          // We crop that exact region from the saved image to keep only the cube.
+          val previewW = previewView.width
+          val previewH = previewView.height
+          if (previewW > 0 && previewH > 0) {
+            takePhoto(context, imageCapture, executor, previewW, previewH, onPhotoSaved)
+          } else {
+            takePhoto(context, imageCapture, executor, 0, 0, onPhotoSaved)
+          }
         },
       )
     }
@@ -330,6 +370,8 @@ private fun takePhoto(
   context: Context,
   imageCapture: ImageCapture,
   executor: Executor,
+  previewW: Int,
+  previewH: Int,
   onPhotoSaved: (String) -> Unit,
 ) {
   val outDir = File(context.cacheDir, "cubelens").apply { mkdirs() }
@@ -341,10 +383,127 @@ private fun takePhoto(
     object : ImageCapture.OnImageSavedCallback {
       override fun onError(exception: ImageCaptureException) = Unit
       override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-        onPhotoSaved(file.absolutePath)
+        val croppedFile = cropGridRegion(file, previewW, previewH)
+        onPhotoSaved(croppedFile.absolutePath)
       }
     },
   )
+}
+
+/**
+ * Crops the saved image to the grid region that was displayed in the camera preview.
+ *
+ * GridOverlay draws a square of side = minOf(w, h) * 0.74 centered in the preview.
+ * This function maps those preview-space coordinates to image-space coordinates
+ * (accounting for aspect-ratio letterboxing and EXIF rotation), then crops and saves
+ * the cropped square, overwriting the original temp file.
+ */
+private fun cropGridRegion(file: File, previewW: Int, previewH: Int): File {
+  if (previewW <= 0 || previewH <= 0) return file
+
+  val srcBitmap = BitmapFactory.decodeFile(file.absolutePath) ?: return file
+
+  val imgW0 = srcBitmap.width
+  val imgH0 = srcBitmap.height
+  if (imgW0 <= 0 || imgH0 <= 0) return file
+
+  // Read EXIF rotation
+  val rotation = try {
+    val exif = ExifInterface(file.absolutePath)
+    when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+      ExifInterface.ORIENTATION_ROTATE_90  -> 90
+      ExifInterface.ORIENTATION_ROTATE_180 -> 180
+      ExifInterface.ORIENTATION_ROTATE_270 -> 270
+      else -> 0
+    }
+  } catch (_: Exception) { 0 }
+
+  // Apply rotation to get effective image dimensions
+  val imgW = if (rotation == 90 || rotation == 270) imgH0 else imgW0
+  val imgH = if (rotation == 90 || rotation == 270) imgW0 else imgH0
+
+  if (imgW <= 0 || imgH <= 0) return file
+
+  // --- Grid bounds in preview coordinates ---
+  val gridSide    = minOf(previewW.toFloat(), previewH.toFloat()) * 0.74f
+  val gridLeft    = (previewW - gridSide) / 2f
+  val gridTop     = (previewH - gridSide) / 2f
+  val gridRight   = gridLeft + gridSide
+  val gridBottom  = gridTop  + gridSide
+
+  // --- Map preview coordinates to image coordinates ---
+  // CameraX back-camera portrait: image is landscape (imgW > imgH) letterboxed in portrait preview
+  val previewRatio = previewW.toFloat() / previewH.toFloat()
+  val imgRatio     = imgW.toFloat()    / imgH.toFloat()
+
+  val leftImgF: Float
+  val topImgF: Float
+  val rightImgF: Float
+  val bottomImgF: Float
+
+  if (imgRatio > previewRatio) {
+    // Image is wider than preview: letterboxed on top/bottom
+    val scaleInv     = previewH.toFloat() / imgH.toFloat()
+    val scaledImgW   = imgW.toFloat() * scaleInv
+    val letterboxPad = (imgW - scaledImgW) / 2f
+
+    if (rotation == 90 || rotation == 270) {
+      leftImgF   = letterboxPad + gridTop    * scaleInv
+      topImgF   = imgW        - gridRight   * scaleInv
+      rightImgF  = letterboxPad + gridBottom * scaleInv
+      bottomImgF = imgW        - gridLeft   * scaleInv
+    } else {
+      leftImgF   = letterboxPad + gridLeft  * scaleInv
+      topImgF   = letterboxPad + gridTop   * scaleInv
+      rightImgF  = letterboxPad + gridRight * scaleInv
+      bottomImgF = letterboxPad + gridBottom * scaleInv
+    }
+  } else {
+    // Image is taller than preview: letterboxed on left/right
+    val scaleInv     = previewW.toFloat() / imgW.toFloat()
+    val scaledImgH   = imgH.toFloat() * scaleInv
+    val letterboxPad = (imgH - scaledImgH) / 2f
+
+    if (rotation == 90 || rotation == 270) {
+      leftImgF   = letterboxPad + gridTop    * scaleInv
+      topImgF   = imgW        - gridRight   * scaleInv
+      rightImgF  = letterboxPad + gridBottom * scaleInv
+      bottomImgF = imgW        - gridLeft   * scaleInv
+    } else {
+      leftImgF   = letterboxPad + gridLeft  * scaleInv
+      topImgF   = letterboxPad + gridTop   * scaleInv
+      rightImgF  = letterboxPad + gridRight * scaleInv
+      bottomImgF = letterboxPad + gridBottom * scaleInv
+    }
+  }
+
+  val l = leftImgF.toInt().coerceIn(0, imgW - 1)
+  val t = topImgF.toInt().coerceIn(0, imgH - 1)
+  val r = rightImgF.toInt().coerceIn(l + 1, imgW)
+  val b = bottomImgF.toInt().coerceIn(t + 1, imgH)
+  val cropW = r - l
+  val cropH = b - t
+
+  if (cropW < 20 || cropH < 20) return file
+
+  // Crop from the pre-EXIF-rotated bitmap (bitmap may still need EXIF rotation applied)
+  val cropped = Bitmap.createBitmap(srcBitmap, l, t, cropW, cropH)
+  srcBitmap.recycle()
+
+  if (cropped == null) return file
+
+  // Apply EXIF rotation and overwrite temp file
+  val rotated = if (rotation != 0) {
+    val matrix = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+    Bitmap.createBitmap(cropped, 0, 0, cropped.width, cropped.height, matrix, true)
+      .also { if (it != cropped) cropped.recycle() }
+  } else cropped
+
+  FileOutputStream(file).use { fos ->
+    rotated.compress(Bitmap.CompressFormat.JPEG, 95, fos)
+  }
+  rotated.recycle()
+  return file
 }
 
 @Composable

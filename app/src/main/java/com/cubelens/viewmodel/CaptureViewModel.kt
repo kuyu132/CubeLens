@@ -20,11 +20,13 @@ data class CaptureUiState(
   val faceOrder: List<CubeFace> = listOf(CubeFace.U, CubeFace.R, CubeFace.F, CubeFace.D, CubeFace.L, CubeFace.B),
   val currentFaceIndex: Int = 0,
   val scans: Map<CubeFace, FaceScan> = emptyMap(),
+  val scanHistory: List<CubeFace> = emptyList(),  // ordered list of scanned faces (for undo)
   val isProcessing: Boolean = false,
   val message: String? = null,
 ) {
   val currentFace: CubeFace get() = faceOrder[currentFaceIndex.coerceIn(faceOrder.indices)]
   val isComplete: Boolean get() = scans.size == faceOrder.size
+  val canUndo: Boolean get() = scanHistory.isNotEmpty()
 }
 
 class CaptureViewModel(app: Application) : AndroidViewModel(app) {
@@ -47,8 +49,10 @@ class CaptureViewModel(app: Application) : AndroidViewModel(app) {
       }
       _uiState.update { state ->
         val nextScans = if (scan != null) state.scans + (face to scan) else state.scans
+        val nextHistory = if (scan != null && face !in state.scans) state.scanHistory + face else state.scanHistory
         state.copy(
           scans = nextScans,
+          scanHistory = nextHistory,
           isProcessing = false,
           message = if (scan == null) {
             getApplication<Application>().getString(R.string.capture_detect_failed)
@@ -60,6 +64,21 @@ class CaptureViewModel(app: Application) : AndroidViewModel(app) {
       if (scan != null) {
         goNext()
       }
+    }
+  }
+
+  /**
+   * Undo the last scan: removes the most recently scanned face from history
+   * and from the scans map, then navigates back to that face.
+   */
+  fun undo() {
+    _uiState.update { state ->
+      if (state.scanHistory.isEmpty()) return@update state
+      val lastFace = state.scanHistory.last()
+      val nextHistory = state.scanHistory.dropLast(1)
+      val nextScans = state.scans - lastFace
+      val nextIndex = state.faceOrder.indexOf(lastFace).coerceAtLeast(0)
+      state.copy(scans = nextScans, scanHistory = nextHistory, currentFaceIndex = nextIndex)
     }
   }
 
