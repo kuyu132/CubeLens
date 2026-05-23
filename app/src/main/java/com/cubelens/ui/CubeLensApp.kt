@@ -14,12 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.cubelens.R
 import com.cubelens.data.AppDatabase
@@ -30,10 +28,12 @@ import com.cubelens.ui.history.HistoryScreen
 import com.cubelens.ui.onboarding.OnboardingScreen
 import com.cubelens.ui.review.ReviewScreen
 import com.cubelens.ui.solving.SolvingScreen
+import com.cubelens.ui.settings.SettingsScreen
 import com.cubelens.ui.timer.TimerScreen
 import com.cubelens.viewmodel.CaptureViewModel
 import com.cubelens.viewmodel.SolveViewModel
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun CubeLensApp(
@@ -72,18 +72,43 @@ fun CubeLensApp(
         selectedTab = BottomTab.SOLVE,
         onTabSelected = { tab -> navController.navigate(tab.route) { launchSingleTop = true } },
         captureViewModel = captureViewModel,
-        solveViewModel = solveViewModel,
         navController = navController,
+        onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
       )
     }
 
     composable(BottomTab.TIMER.route) {
+      val inspectionEnabled by prefs.inspectionEnabled.collectAsStateWithLifecycle(initialValue = true)
       TimerTabScreen(
         selectedTab = BottomTab.TIMER,
         onTabSelected = { tab -> navController.navigate(tab.route) { launchSingleTop = true } },
-        onSaveSolve = { scramble, timeMs ->
+        inspectionEnabled = inspectionEnabled,
+        onSaveSolve = { scramble, timeMs, penalty ->
           scope.launch {
-            solveDao.insert(SolveRecord(scramble = scramble, solution = "", moveCount = 0, timeMs = timeMs))
+            solveDao.insert(
+              SolveRecord(
+                scramble = scramble,
+                solution = "",
+                moveCount = 0,
+                timeMs = timeMs,
+                penalty = penalty,
+              ),
+            )
+          }
+        },
+      )
+    }
+
+    composable(Routes.SETTINGS) {
+      SettingsScreen(
+        prefs = prefs,
+        onBack = { navController.popBackStack() },
+        onReplayOnboarding = {
+          scope.launch {
+            prefs.setOnboardingCompleted(false)
+            navController.navigate(Routes.ONBOARDING) {
+              popUpTo(BottomTab.SOLVE.route) { inclusive = true }
+            }
           }
         },
       )
@@ -124,6 +149,7 @@ fun CubeLensApp(
                 solution = solution,
                 moveCount = moveCount,
                 timeMs = 0L,
+                penalty = "",
               ),
             )
           }
@@ -138,8 +164,8 @@ private fun MainTabScreen(
   selectedTab: BottomTab,
   onTabSelected: (BottomTab) -> Unit,
   captureViewModel: CaptureViewModel,
-  solveViewModel: SolveViewModel,
   navController: androidx.navigation.NavHostController,
+  onNavigateToSettings: () -> Unit,
 ) {
   Scaffold(
     bottomBar = {
@@ -149,6 +175,7 @@ private fun MainTabScreen(
     CaptureScreen(
       viewModel = captureViewModel,
       onReview = { navController.navigate(Routes.REVIEW) },
+      onNavigateToSettings = onNavigateToSettings,
       modifier = Modifier.padding(innerPadding),
     )
   }
@@ -158,7 +185,8 @@ private fun MainTabScreen(
 private fun TimerTabScreen(
   selectedTab: BottomTab,
   onTabSelected: (BottomTab) -> Unit,
-  onSaveSolve: (String, Long) -> Unit,
+  inspectionEnabled: Boolean,
+  onSaveSolve: (String, Long, String) -> Unit,
 ) {
   Scaffold(
     bottomBar = {
@@ -166,6 +194,7 @@ private fun TimerTabScreen(
     },
   ) { innerPadding ->
     TimerScreen(
+      inspectionEnabled = inspectionEnabled,
       onSaveSolve = onSaveSolve,
       modifier = Modifier.padding(innerPadding),
     )
@@ -205,10 +234,10 @@ private fun CubeLensNavBar(
         icon = {
           Icon(
             imageVector = ImageVector.vectorResource(tab.iconRes),
-            contentDescription = tab.label,
+            contentDescription = stringResource(tab.labelRes),
           )
         },
-        label = { Text(tab.label) },
+        label = { Text(stringResource(tab.labelRes)) },
         selected = tab == selectedTab,
         onClick = { onTabSelected(tab) },
       )
@@ -220,10 +249,11 @@ private object Routes {
   const val ONBOARDING = "onboarding"
   const val REVIEW = "review"
   const val SOLVING = "solving"
+  const val SETTINGS = "settings"
 }
 
-enum class BottomTab(val route: String, val label: String, val iconRes: Int) {
-  SOLVE("tab_solve", "Solve", R.drawable.ic_cube),
-  TIMER("tab_timer", "Timer", R.drawable.ic_timer),
-  HISTORY("tab_history", "History", R.drawable.ic_history),
+enum class BottomTab(val route: String, val labelRes: Int, val iconRes: Int) {
+  SOLVE("tab_solve", R.string.tab_solve, R.drawable.ic_cube),
+  TIMER("tab_timer", R.string.tab_timer, R.drawable.ic_timer),
+  HISTORY("tab_history", R.string.tab_history, R.drawable.ic_history),
 }

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">魔方慧眼</string>
+
+  <string name="tab_solve">扫描</string>
+  <string name="tab_timer">计时</string>
+  <string name="tab_history">记录</string>
+
+  <string name="menu_more">更多</string>
+  <string name="menu_settings">设置</string>
+
+  <string name="capture_title">拍摄 · %1$s 面</string>
+  <string name="capture_camera_required">需要相机权限才能扫描魔方。</string>
+  <string name="capture_grant_permission">去授权</string>
+  <string name="capture_prev">上一面</string>
+  <string name="capture_review">核对</string>
+  <string name="capture_progress">已拍 %1$d/6 面</string>
+  <string name="capture_detect_failed">颜色识别失败，请重试。</string>
+
+  <string name="review_title">核对贴纸</string>
+  <string name="review_hint">点击色块可循环切换颜色；置信度低的格会有红框提示。</string>
+  <string name="review_face">%1$s 面</string>
+  <string name="review_back">返回</string>
+  <string name="review_solve">求解</string>
+
+  <string name="solving_title">步骤演示</string>
+  <string name="solving_back">返回</string>
+  <string name="solving_share">分享</string>
+  <string name="solving_incomplete">魔方状态不完整或无效，请返回核对。</string>
+  <string name="solving_solving">正在求解…</string>
+  <string name="solving_no_result">暂无求解结果。</string>
+  <string name="solving_move_progress">第 %1$d / %2$d 步</string>
+  <string name="solving_solved">已完成！</string>
+  <string name="solving_prev">◀ 上一步</string>
+  <string name="solving_play">▶ 播放</string>
+  <string name="solving_pause">⏸ 暂停</string>
+  <string name="solving_next">下一步 ▶</string>
+  <string name="solving_save_title">保存本次还原？</string>
+  <string name="solving_save_body">将记录 %1$d 步的解法到历史。</string>
+  <string name="solving_save_confirm">保存</string>
+  <string name="solving_save_cancel">取消</string>
+  <string name="solving_share_text">🧊 %1$s\n打乱: %2$s\n解法: %3$s（%4$d 步）\n时间: --</string>
+  <string name="solving_share_chooser">分享解法</string>
+
+  <string name="history_title">还原记录</string>
+  <string name="history_clear_all">清空</string>
+  <string name="history_empty_title">还没有记录</string>
+  <string name="history_empty_subtitle">用计时器还原或完成一次扫描求解后，会出现在这里</string>
+  <string name="history_delete">删除</string>
+  <string name="history_stats">统计</string>
+  <string name="history_stat_total">次数</string>
+  <string name="history_stat_best">最快</string>
+  <string name="history_stat_ao5">Ao5</string>
+  <string name="history_stat_ao12">Ao12</string>
+  <string name="history_stat_ao100">Ao100</string>
+  <string name="history_na">暂无</string>
+  <string name="history_moves_date">%1$d 步 · %2$s</string>
+  <string name="history_clear_title">清空全部记录？</string>
+  <string name="history_clear_body">所有还原记录将被永久删除。</string>
+  <string name="history_clear_confirm">全部删除</string>
+  <string name="history_clear_cancel">取消</string>
+  <string name="history_detail_title">记录详情</string>
+  <string name="history_detail_scramble">打乱 / 状态串</string>
+  <string name="history_detail_solution">解法</string>
+  <string name="history_detail_none">（无）</string>
+  <string name="history_detail_copy">复制</string>
+  <string name="history_detail_share">分享</string>
+  <string name="history_detail_close">关闭</string>
+  <string name="history_detail_copied">已复制到剪贴板</string>
+
+  <string name="timer_title">计时器</string>
+  <string name="timer_start">开始</string>
+  <string name="timer_stop">停止</string>
+  <string name="timer_save">保存成绩</string>
+  <string name="timer_new_scramble">新打乱</string>
+  <string name="timer_inspection_label">观察</string>
+  <string name="timer_inspection_skip">开始计时</string>
+  <string name="timer_inspection_hint">WCA 风格观察 %1$d 秒，结束后自动开始计时。</string>
+  <string name="timer_paste_scramble">粘贴打乱</string>
+  <string name="timer_paste_empty">剪贴板为空或非文本。</string>
+  <string name="timer_penalty_plus2">+2</string>
+  <string name="timer_penalty_dnf">DNF</string>
+  <string name="timer_penalty_ok">无惩罚</string>
+  <string name="timer_penalty_hint">保存前可选择 WCA 惩罚。</string>
+  <string name="history_export">导出</string>
+  <string name="history_export_chooser">导出记录</string>
+  <string name="history_time_with_plus2">%1$s（+2）</string>
+
+  <string name="onboarding_title_0">对准即扫</string>
+  <string name="onboarding_desc_0">将相机对准魔方任一面，魔方慧眼会用 HSV 色彩分析自动识别贴纸颜色。</string>
+  <string name="onboarding_title_1">扫满六面</string>
+  <string name="onboarding_desc_1">转动魔方，按提示逐面拍摄。应用会记录进度并引导你完成六面。</string>
+  <string name="onboarding_title_2">获得解法</string>
+  <string name="onboarding_desc_2">使用 Kociemba 两阶段算法求解，并逐步演示每一步，附带简易 3D 预览。</string>
+  <string name="onboarding_skip">跳过</string>
+  <string name="onboarding_next">下一步</string>
+  <string name="onboarding_start">开始使用</string>
+
+  <string name="settings_title">设置</string>
+  <string name="settings_inspection">WCA 观察倒计时</string>
+  <string name="settings_inspection_sub">计时前先观察 15 秒（可随时跳过并开始）。</string>
+  <string name="settings_replay_onboarding">重新查看引导</string>
+  <string name="settings_replay_onboarding_sub">再次显示首次打开时的欢迎页。</string>
+  <string name="settings_about">关于</string>
+  <string name="settings_about_sub">版本与说明</string>
+  <string name="settings_open_about">查看</string>
+  <string name="settings_replay_action">重看</string>
+  <string name="settings_about_title">关于魔方慧眼</string>
+  <string name="settings_about_body">魔方扫描与求解助手。\n\n版本 %1$s</string>
+  <string name="settings_ok">好的</string>
+  <string name="settings_replay_confirm_title">要重新查看引导吗？</string>
+  <string name="settings_replay_confirm_body">将返回欢迎页。你的还原记录不会被删除。</string>
+  <string name="settings_replay_confirm">继续</string>
+  <string name="settings_back">返回</string>
+</resources>

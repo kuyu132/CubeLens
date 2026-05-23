@@ -2,6 +2,7 @@ package com.cubelens.viewmodel
 
 import android.app.Application
 import android.graphics.Bitmap
+import com.cubelens.R
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cubelens.camera.ColorDetector
@@ -49,7 +50,11 @@ class CaptureViewModel(app: Application) : AndroidViewModel(app) {
         state.copy(
           scans = nextScans,
           isProcessing = false,
-          message = if (scan == null) "Color detection failed. Try again." else null,
+          message = if (scan == null) {
+            getApplication<Application>().getString(R.string.capture_detect_failed)
+          } else {
+            null
+          },
         )
       }
       if (scan != null) {

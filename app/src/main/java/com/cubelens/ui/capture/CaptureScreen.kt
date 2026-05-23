@@ -32,7 +32,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +39,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,11 +52,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.cubelens.R
 import com.cubelens.ui.util.BitmapUtils
 import com.cubelens.viewmodel.CaptureViewModel
 import java.io.File
@@ -67,10 +69,10 @@ import java.util.concurrent.Executor
 fun CaptureScreen(
   viewModel: CaptureViewModel,
   onReview: () -> Unit,
+  onNavigateToSettings: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
-  val context = LocalContext.current
 
   var hasCameraPermission by remember { mutableStateOf(false) }
   val permissionLauncher = rememberLauncherForActivityResult(
@@ -85,22 +87,28 @@ fun CaptureScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Capture • Face ${state.currentFace.label}") },
+        title = { Text(stringResource(R.string.capture_title, state.currentFace.label)) },
+        actions = {
+          TextButton(onClick = onNavigateToSettings) {
+            Text(stringResource(R.string.menu_settings))
+          }
+        },
       )
     },
   ) { innerPadding ->
     Column(
       modifier = Modifier
         .fillMaxSize()
+        .then(modifier)
         .padding(innerPadding),
     ) {
       if (!hasCameraPermission) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Camera permission is required.")
+            Text(stringResource(R.string.capture_camera_required))
             Spacer(Modifier.height(12.dp))
             Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-              Text("Grant permission")
+              Text(stringResource(R.string.capture_grant_permission))
             }
           }
         }
@@ -209,12 +217,12 @@ fun CaptureScreen(
           onClick = { viewModel.goPrev() },
           enabled = state.currentFaceIndex > 0 && !state.isProcessing,
         ) {
-          Text("Prev")
+          Text(stringResource(R.string.capture_prev))
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           Text(
-            text = "${state.scans.size}/6 captured",
+            text = stringResource(R.string.capture_progress, state.scans.size),
             style = MaterialTheme.typography.bodyMedium,
           )
           state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -224,7 +232,7 @@ fun CaptureScreen(
           onClick = onReview,
           enabled = state.isComplete && !state.isProcessing,
         ) {
-          Text("Review")
+          Text(stringResource(R.string.capture_review))
         }
       }
     }

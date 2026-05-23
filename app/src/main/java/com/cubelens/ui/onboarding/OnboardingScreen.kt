@@ -1,8 +1,5 @@
 package com.cubelens.ui.onboarding
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -26,34 +25,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import com.cubelens.R
 import kotlinx.coroutines.launch
 
 private data class OnboardingPage(
-  val title: String,
-  val description: String,
+  val titleRes: Int,
+  val descriptionRes: Int,
   val emoji: String,
-)
-
-private val pages = listOf(
-  OnboardingPage(
-    title = "Point & Scan",
-    description = "Aim your camera at any face of the Rubik's cube. CubeLens will detect the colors automatically using real-time HSV analysis.",
-    emoji = "📷",
-  ),
-  OnboardingPage(
-    title = "Scan All 6 Faces",
-    description = "Rotate the cube and scan each face one by one. The app tracks which faces you've captured and guides you through the process.",
-    emoji = "🎲",
-  ),
-  OnboardingPage(
-    title = "Get Your Solution",
-    description = "CubeLens solves the cube using the Kociemba two-phase algorithm and shows you each move step by step with a 3D preview.",
-    emoji = "🧩",
-  ),
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -61,6 +42,11 @@ private val pages = listOf(
 fun OnboardingScreen(
   onCompleted: () -> Unit,
 ) {
+  val pages = listOf(
+    OnboardingPage(R.string.onboarding_title_0, R.string.onboarding_desc_0, "📷"),
+    OnboardingPage(R.string.onboarding_title_1, R.string.onboarding_desc_1, "🎲"),
+    OnboardingPage(R.string.onboarding_title_2, R.string.onboarding_desc_2, "🧩"),
+  )
   val pagerState = rememberPagerState(pageCount = { pages.size })
   val scope = rememberCoroutineScope()
 
@@ -89,14 +75,14 @@ fun OnboardingScreen(
         )
         Spacer(Modifier.height(24.dp))
         Text(
-          text = item.title,
+          text = stringResource(item.titleRes),
           style = MaterialTheme.typography.headlineMedium,
           color = MaterialTheme.colorScheme.onBackground,
           textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(12.dp))
         Text(
-          text = item.description,
+          text = stringResource(item.descriptionRes),
           style = MaterialTheme.typography.bodyLarge,
           color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
           textAlign = TextAlign.Center,
@@ -105,7 +91,6 @@ fun OnboardingScreen(
       }
     }
 
-    // Dots indicator
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -122,13 +107,12 @@ fun OnboardingScreen(
             .clip(CircleShape)
             .background(
               if (isSelected) MaterialTheme.colorScheme.primary
-              else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+              else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
             ),
         )
       }
     }
 
-    // Navigation buttons
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -140,7 +124,7 @@ fun OnboardingScreen(
         onClick = onCompleted,
         modifier = Modifier.padding(start = 8.dp),
       ) {
-        Text("Skip")
+        Text(stringResource(R.string.onboarding_skip))
       }
 
       Button(
@@ -153,7 +137,13 @@ fun OnboardingScreen(
         },
         modifier = Modifier.padding(end = 8.dp),
       ) {
-        Text(if (pagerState.currentPage < pages.size - 1) "Next" else "Get Started")
+        Text(
+          if (pagerState.currentPage < pages.size - 1) {
+            stringResource(R.string.onboarding_next)
+          } else {
+            stringResource(R.string.onboarding_start)
+          },
+        )
       }
     }
   }

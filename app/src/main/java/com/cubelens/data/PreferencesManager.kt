@@ -15,6 +15,7 @@ class PreferencesManager(private val context: Context) {
 
   private object Keys {
     val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+    val INSPECTION_ENABLED = booleanPreferencesKey("inspection_enabled")
   }
 
   val onboardingCompleted: Flow<Boolean> = context.dataStore.data
@@ -22,9 +23,20 @@ class PreferencesManager(private val context: Context) {
       preferences[Keys.ONBOARDING_COMPLETED] ?: false
     }
 
+  val inspectionEnabled: Flow<Boolean> = context.dataStore.data
+    .map { preferences ->
+      preferences[Keys.INSPECTION_ENABLED] ?: true
+    }
+
   suspend fun setOnboardingCompleted(completed: Boolean) {
     context.dataStore.edit { preferences ->
       preferences[Keys.ONBOARDING_COMPLETED] = completed
+    }
+  }
+
+  suspend fun setInspectionEnabled(enabled: Boolean) {
+    context.dataStore.edit { preferences ->
+      preferences[Keys.INSPECTION_ENABLED] = enabled
     }
   }
 }

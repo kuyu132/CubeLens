@@ -27,7 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cubelens.R
 import com.cubelens.model.CubeFace
 import com.cubelens.ui.util.CubeColorUi
 import com.cubelens.viewmodel.CaptureViewModel
@@ -44,7 +46,7 @@ fun ReviewScreen(
   Scaffold(
     topBar = {
       TopAppBar(
-        title = { Text("Review") },
+        title = { Text(stringResource(R.string.review_title)) },
       )
     },
   ) { innerPadding ->
@@ -55,7 +57,7 @@ fun ReviewScreen(
     ) {
       item {
         Text(
-          "Tap a sticker to cycle colors. Low-confidence stickers are outlined.",
+          stringResource(R.string.review_hint),
           style = MaterialTheme.typography.bodyMedium,
         )
       }
@@ -77,8 +79,8 @@ fun ReviewScreen(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-          Button(onClick = onBack) { Text("Back") }
-          Button(onClick = onSolve, enabled = state.isComplete) { Text("Solve") }
+          Button(onClick = onBack) { Text(stringResource(R.string.review_back)) }
+          Button(onClick = onSolve, enabled = state.isComplete) { Text(stringResource(R.string.review_solve)) }
         }
       }
     }
@@ -97,7 +99,7 @@ private fun FaceCard(
     modifier = Modifier.fillMaxWidth(),
   ) {
     Column(modifier = Modifier.padding(12.dp)) {
-      Text("Face ${face.label}", style = MaterialTheme.typography.titleMedium)
+      Text(stringResource(R.string.review_face, face.label), style = MaterialTheme.typography.titleMedium)
       Spacer(Modifier.height(10.dp))
       FaceGrid(colors = colors, confidences = confidences, onTapSticker = onTapSticker)
     }

@@ -10,5 +10,7 @@ data class SolveRecord(
   val moveCount: Int,
   val timeMs: Long,
   val date: Long = System.currentTimeMillis(),
+  /** [SolvePenalty] */
+  val penalty: String = "",
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
 )

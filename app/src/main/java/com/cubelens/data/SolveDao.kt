@@ -20,7 +20,9 @@ interface SolveDao {
   @Query("DELETE FROM solve_history")
   suspend fun deleteAll()
 
-  @Query("SELECT * FROM solve_history ORDER BY date DESC LIMIT :limit")  fun getRecent(limit: Int): Flow<List<SolveRecord>>
+  @Query("SELECT * FROM solve_history ORDER BY date DESC LIMIT :limit")
+  fun getRecent(limit: Int): Flow<List<SolveRecord>>
 
-  @Query("SELECT MIN(timeMs) FROM solve_history")  fun getBestTime(): Flow<Long?>
+  @Query("SELECT MIN(timeMs) FROM solve_history")
+  fun getBestTime(): Flow<Long?>
 }

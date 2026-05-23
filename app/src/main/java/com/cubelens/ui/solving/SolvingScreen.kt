@@ -17,13 +17,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -46,8 +43,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cubelens.R
 import com.cubelens.model.CubeColor
 import com.cubelens.model.CubeFace
 import com.cubelens.model.FaceScan
@@ -96,28 +95,39 @@ fun SolvingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Solving") },
+                title = { Text(stringResource(R.string.solving_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBackLatest) { Text("←") }
+                    IconButton(onClick = onBackLatest) {
+                        Text(stringResource(R.string.solving_back))
+                    }
                 },
                 actions = {
                     if (result != null && result.moves.isNotEmpty()) {
-                        IconButton(
+                        TextButton(
                             onClick = {
-                                val moves = result.moves.joinToString(" ")
+                                val movesJoined = result.moves.joinToString(" ")
                                 val scramble = facelets ?: ""
-                                val shareText = buildShareText(scramble, moves)
+                                val moveCount = result.moves.size
+                                val shareText = context.getString(
+                                    R.string.solving_share_text,
+                                    context.getString(R.string.app_name),
+                                    scramble,
+                                    movesJoined,
+                                    moveCount,
+                                )
                                 val intent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, shareText)
                                 }
-                                context.startActivity(Intent.createChooser(intent, "Share Solution"))
+                                context.startActivity(
+                                    Intent.createChooser(
+                                        intent,
+                                        context.getString(R.string.solving_share_chooser),
+                                    ),
+                                )
                             },
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Share",
-                            )
+                            Text(stringResource(R.string.solving_share))
                         }
                     }
                 },
@@ -133,11 +143,11 @@ fun SolvingScreen(
         ) {
             if (facelets == null) {
                 Text(
-                    "Cube is incomplete or invalid. Go back to review.",
+                    stringResource(R.string.solving_incomplete),
                     color = MaterialTheme.colorScheme.error,
                 )
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = onBackLatest) { Text("Back") }
+                Button(onClick = onBackLatest) { Text(stringResource(R.string.solving_back)) }
                 return@Column
             }
 
@@ -148,14 +158,14 @@ fun SolvingScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Text("Solving…")
+                        Text(stringResource(R.string.solving_solving))
                     }
                 }
                 return@Column
             }
 
             val result = solveState.result ?: run {
-                Text("No solve result yet.")
+                Text(stringResource(R.string.solving_no_result))
                 return@Column
             }
 
@@ -174,7 +184,11 @@ fun SolvingScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (total == 0) "Solved!" else "Move ${currentStep + 1} / $total",
+                    text = if (total == 0) {
+                        stringResource(R.string.solving_solved)
+                    } else {
+                        stringResource(R.string.solving_move_progress, currentStep + 1, total)
+                    },
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
@@ -204,21 +218,27 @@ fun SolvingScreen(
                     onClick = { solveViewModel.prevStep() },
                     enabled = total > 0 && currentStep > 0,
                     modifier = Modifier.weight(1f),
-                ) { Text("◀ Prev") }
+                ) { Text(stringResource(R.string.solving_prev)) }
 
                 Button(
                     onClick = { solveViewModel.togglePlay() },
                     enabled = total > 0,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(if (solveState.isPlaying) "⏸ Pause" else "▶ Play")
+                    Text(
+                        if (solveState.isPlaying) {
+                            stringResource(R.string.solving_pause)
+                        } else {
+                            stringResource(R.string.solving_play)
+                        },
+                    )
                 }
 
                 OutlinedButton(
                     onClick = { solveViewModel.nextStep() },
                     enabled = total > 0 && currentStep < total - 1,
                     modifier = Modifier.weight(1f),
-                ) { Text("Next ▶") }
+                ) { Text(stringResource(R.string.solving_next)) }
             }
 
             // Move list — auto-scroll to current
@@ -260,26 +280,30 @@ fun SolvingScreen(
     if (showSaveDialog && onSaveSolve != null) {
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
-            title = { Text("Save this solve?") },
+            title = { Text(stringResource(R.string.solving_save_title)) },
             text = {
-                val movesText = result?.moves?.joinToString(" ") ?: ""
-                Text("Record this solution with ${result?.moves?.size ?: 0} moves?")
+                Text(
+                    stringResource(
+                        R.string.solving_save_body,
+                        result?.moves?.size ?: 0,
+                    ),
+                )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         val movesText = result?.moves?.joinToString(" ") ?: ""
                         val moveCount = result?.moves?.size ?: 0
-                        onSaveSolve?.invoke(facelets ?: "", movesText, moveCount)
+                        onSaveSolve.invoke(facelets ?: "", movesText, moveCount)
                         showSaveDialog = false
                     },
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.solving_save_confirm))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSaveDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.solving_save_cancel))
                 }
             },
         )
@@ -634,14 +658,4 @@ private fun faceletsFromScans(
         }
     }
     return sb.toString()
-}
-
-private fun buildShareText(scramble: String, moves: String): String {
-    val moveCount = moves.split(" ").filter { it.isNotBlank() }.size
-    return buildString {
-        appendLine("🧊 CubeLens")
-        appendLine("Scramble: $scramble")
-        appendLine("Solution: $moves ($moveCount moves)")
-        appendLine("Time: --")
-    }.trimEnd()
 }
