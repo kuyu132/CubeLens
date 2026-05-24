@@ -54,6 +54,7 @@ fun SettingsScreen(
   onBack: () -> Unit,
   onReplayOnboarding: () -> Unit = {},
   onClearAllData: () -> Unit = {},
+  onColorCalibration: () -> Unit = {},
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -165,6 +166,25 @@ fun SettingsScreen(
       HorizontalDivider()
       Spacer(Modifier.height(16.dp))
 
+      ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_color_calibration)) },
+        supportingContent = {
+          Text(
+            stringResource(R.string.settings_color_calibration_sub),
+            style = MaterialTheme.typography.bodySmall,
+          )
+        },
+        modifier = Modifier
+          .fillMaxWidth()
+          .clickable { onColorCalibration() },
+        trailingContent = {
+          TextButton(onClick = onColorCalibration) {
+            Text(stringResource(R.string.settings_calibration_open))
+          }
+        },
+      )
+
+      HorizontalDivider()
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_inspection)) },
         supportingContent = {

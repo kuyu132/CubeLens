@@ -5,8 +5,10 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.cubelens.camera.ColorCalibration
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -31,6 +33,8 @@ class PreferencesManager(private val context: Context) {
     val INSPECTION_ENABLED = booleanPreferencesKey("inspection_enabled")
     val THEME_MODE = stringPreferencesKey("theme_mode")
     val CAMERA_LENS_FACING = intPreferencesKey("camera_lens_facing")
+    val COLOR_HUE_OFFSET = floatPreferencesKey("color_hue_offset")
+    val COLOR_WHITE_SAT_MAX = floatPreferencesKey("color_white_sat_max")
   }
 
   // ── Onboarding ──────────────────────────────────────────────────────────────
@@ -81,6 +85,35 @@ class PreferencesManager(private val context: Context) {
   suspend fun setCameraLensFacing(lensFacing: Int) {
     context.dataStore.edit { preferences ->
       preferences[Keys.CAMERA_LENS_FACING] = lensFacing
+    }
+  }
+
+  // ── Color calibration ─────────────────────────────────────────────────────────
+
+  val colorCalibration: Flow<ColorCalibration> = context.dataStore.data
+    .map { preferences ->
+      ColorCalibration(
+        hueOffsetDeg = preferences[Keys.COLOR_HUE_OFFSET] ?: 0f,
+        whiteSatMax = preferences[Keys.COLOR_WHITE_SAT_MAX] ?: 0.20f,
+      )
+    }
+
+  suspend fun setColorHueOffset(degrees: Float) {
+    context.dataStore.edit { preferences ->
+      preferences[Keys.COLOR_HUE_OFFSET] = degrees.coerceIn(-30f, 30f)
+    }
+  }
+
+  suspend fun setColorWhiteSatMax(value: Float) {
+    context.dataStore.edit { preferences ->
+      preferences[Keys.COLOR_WHITE_SAT_MAX] = value.coerceIn(0.08f, 0.35f)
+    }
+  }
+
+  suspend fun resetColorCalibration() {
+    context.dataStore.edit { preferences ->
+      preferences.remove(Keys.COLOR_HUE_OFFSET)
+      preferences.remove(Keys.COLOR_WHITE_SAT_MAX)
     }
   }
 }

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cubelens.model.SolveResult
 import com.cubelens.solver.KociembaSolver
+import com.cubelens.solver.Move
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -53,6 +54,30 @@ class SolveViewModel : ViewModel() {
 
       _uiState.update { it.copy(isSolving = false, result = result, currentStep = 0, animProgress = 1f) }
     }
+  }
+
+  /** Load a saved solution for replay without re-solving. */
+  fun loadSolution(solution: String) {
+    playJob?.cancel()
+    val parsed = runCatching {
+      solution.split(Regex("\\s+")).filter { it.isNotBlank() }.map { Move.parse(it) }
+    }
+    if (parsed.isFailure) {
+      _uiState.value = SolveUiState(
+        result = SolveResult(
+          moves = emptyList(),
+          errorMessage = parsed.exceptionOrNull()?.message ?: "Invalid solution",
+        ),
+      )
+      return
+    }
+    _uiState.value = SolveUiState(
+      isSolving = false,
+      result = SolveResult(moves = parsed.getOrThrow()),
+      currentStep = 0,
+      animProgress = 1f,
+      isPlaying = false,
+    )
   }
 
   fun nextStep() {

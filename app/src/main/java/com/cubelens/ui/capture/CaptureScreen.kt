@@ -3,8 +3,10 @@ package com.cubelens.ui.capture
 import android.Manifest
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
@@ -46,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,12 +64,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.cubelens.R
+import com.cubelens.camera.ColorCalibration
+import com.cubelens.camera.ColorDetector
+import com.cubelens.camera.centerGridCrop
+import com.cubelens.camera.toRgbaBitmap
+import com.cubelens.model.CubeColor
+import com.cubelens.model.CubeFace
 import com.cubelens.ui.util.BitmapUtils
+import com.cubelens.ui.util.CubeColorUi
 import com.cubelens.viewmodel.CaptureViewModel
 import java.io.File
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,16 +86,30 @@ fun CaptureScreen(
   viewModel: CaptureViewModel,
   onReview: () -> Unit,
   onNavigateToSettings: () -> Unit,
+  onManualInput: () -> Unit = {},
   modifier: Modifier = Modifier,
   lensFacing: Int = CameraSelector.LENS_FACING_BACK,
 ) {
+  val context = LocalContext.current
   val state by viewModel.uiState.collectAsStateWithLifecycle()
+  val colorCalibration by viewModel.colorCalibration.collectAsStateWithLifecycle()
 
   var hasCameraPermission by remember { mutableStateOf(false) }
   val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission(),
     onResult = { granted -> hasCameraPermission = granted },
   )
+
+  val galleryLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia(),
+  ) { uri ->
+    if (uri == null) return@rememberLauncherForActivityResult
+    val bitmap = BitmapUtils.decodeFromUri(context, uri) ?: run {
+      Toast.makeText(context, context.getString(R.string.capture_gallery_failed), Toast.LENGTH_SHORT).show()
+      return@rememberLauncherForActivityResult
+    }
+    viewModel.setCapturedFaceBitmap(state.currentFace, bitmap, null)
+  }
 
   LaunchedEffect(Unit) {
     permissionLauncher.launch(Manifest.permission.CAMERA)
@@ -193,10 +219,35 @@ fun CaptureScreen(
           Cube3DPreview(
             modifier = Modifier
               .fillMaxWidth()
-              .height(150.dp)
+              .height(200.dp)
               .padding(horizontal = 12.dp, vertical = 6.dp),
             scans = state.scans,
+            highlightFace = state.currentFace,
           )
+        }
+      }
+
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        OutlinedButton(
+          onClick = {
+            galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+          },
+          enabled = !state.isProcessing,
+          modifier = Modifier.weight(1f),
+        ) {
+          Text(stringResource(R.string.capture_gallery))
+        }
+        OutlinedButton(
+          onClick = onManualInput,
+          enabled = !state.isProcessing,
+          modifier = Modifier.weight(1f),
+        ) {
+          Text(stringResource(R.string.capture_manual_input))
         }
       }
 
@@ -205,9 +256,13 @@ fun CaptureScreen(
           faceLabel = state.currentFace.label,
           enabled = !state.isProcessing,
           lensFacing = lensFacing,
+          calibration = colorCalibration,
           onPhotoSaved = { path ->
             val bmp = BitmapUtils.decodeUpright(path) ?: return@CameraPreviewWithCapture
             viewModel.setCapturedFaceBitmap(state.currentFace, bmp, path)
+          },
+          onPhotoError = {
+            Toast.makeText(context, context.getString(R.string.capture_photo_failed), Toast.LENGTH_SHORT).show()
           },
         )
 
@@ -274,7 +329,9 @@ private fun CameraPreviewWithCapture(
   faceLabel: String,
   enabled: Boolean,
   lensFacing: Int,
+  calibration: ColorCalibration,
   onPhotoSaved: (String) -> Unit,
+  onPhotoError: () -> Unit = {},
 ) {
   val context = LocalContext.current
   val lifecycleOwner = LocalLifecycleOwner.current
@@ -292,7 +349,22 @@ private fun CameraPreviewWithCapture(
       .build()
   }
 
-  LaunchedEffect(Unit) {
+  val imageAnalysis = remember {
+    ImageAnalysis.Builder()
+      .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+      .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+      .build()
+  }
+
+  val colorDetector = remember { ColorDetector() }
+  val analyzeExecutor = remember { Executors.newSingleThreadExecutor() }
+  var previewColors by remember { mutableStateOf<List<CubeColor>?>(null) }
+
+  DisposableEffect(Unit) {
+    onDispose { analyzeExecutor.shutdown() }
+  }
+
+  LaunchedEffect(lensFacing) {
     val provider = ProcessCameraProvider.getInstance(context).get()
     provider.unbindAll()
     val preview = Preview.Builder().build().apply {
@@ -303,12 +375,42 @@ private fun CameraPreviewWithCapture(
       CameraSelector.Builder().requireLensFacing(lensFacing).build(),
       preview,
       imageCapture,
+      imageAnalysis,
     )
+  }
+
+  LaunchedEffect(enabled, lensFacing, calibration) {
+    if (!enabled) {
+      imageAnalysis.clearAnalyzer()
+      previewColors = null
+      return@LaunchedEffect
+    }
+    var lastAnalyzeAt = 0L
+    imageAnalysis.setAnalyzer(analyzeExecutor) { proxy ->
+      val now = System.currentTimeMillis()
+      if (now - lastAnalyzeAt < 350) {
+        proxy.close()
+        return@setAnalyzer
+      }
+      lastAnalyzeAt = now
+      try {
+        val frame = proxy.toRgbaBitmap() ?: return@setAnalyzer
+        val cropped = centerGridCrop(frame)
+        val colors = colorDetector.detectFace(CubeFace.U, cropped, null, calibration).colors
+        ContextCompat.getMainExecutor(context).execute {
+          previewColors = colors
+        }
+      } catch (_: Throwable) {
+        // Ignore preview analysis errors
+      } finally {
+        proxy.close()
+      }
+    }
   }
 
   Box(modifier = Modifier.fillMaxSize()) {
     AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-    GridOverlay(faceLabel = faceLabel)
+    GridOverlay(faceLabel = faceLabel, previewColors = previewColors)
 
     Box(
       modifier = Modifier
@@ -324,9 +426,9 @@ private fun CameraPreviewWithCapture(
           val previewW = previewView.width
           val previewH = previewView.height
           if (previewW > 0 && previewH > 0) {
-            takePhoto(context, imageCapture, executor, previewW, previewH, onPhotoSaved)
+            takePhoto(context, imageCapture, executor, previewW, previewH, onPhotoSaved, onPhotoError)
           } else {
-            takePhoto(context, imageCapture, executor, 0, 0, onPhotoSaved)
+            takePhoto(context, imageCapture, executor, 0, 0, onPhotoSaved, onPhotoError)
           }
         },
       )
@@ -373,6 +475,7 @@ private fun takePhoto(
   previewW: Int,
   previewH: Int,
   onPhotoSaved: (String) -> Unit,
+  onPhotoError: () -> Unit,
 ) {
   val outDir = File(context.cacheDir, "cubelens").apply { mkdirs() }
   val file = File(outDir, "face_${System.currentTimeMillis()}.jpg")
@@ -381,7 +484,9 @@ private fun takePhoto(
     outputOptions,
     executor,
     object : ImageCapture.OnImageSavedCallback {
-      override fun onError(exception: ImageCaptureException) = Unit
+      override fun onError(exception: ImageCaptureException) {
+        onPhotoError()
+      }
       override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
         val croppedFile = cropGridRegion(file, previewW, previewH)
         onPhotoSaved(croppedFile.absolutePath)
@@ -507,7 +612,7 @@ private fun cropGridRegion(file: File, previewW: Int, previewH: Int): File {
 }
 
 @Composable
-private fun GridOverlay(faceLabel: String) {
+private fun GridOverlay(faceLabel: String, previewColors: List<CubeColor>? = null) {
   Canvas(modifier = Modifier.fillMaxSize()) {
     val w = size.width
     val h = size.height
@@ -517,19 +622,32 @@ private fun GridOverlay(faceLabel: String) {
     val line = 2.dp.toPx()
     val alpha = 0.65f
 
-    // Border
     drawRect(
       color = Color.White.copy(alpha = alpha),
       topLeft = Offset(left, top),
       size = androidx.compose.ui.geometry.Size(side, side),
       style = androidx.compose.ui.graphics.drawscope.Stroke(width = line),
     )
-    // Grid lines
     for (i in 1..2) {
       val x = left + side * i / 3f
       val y = top + side * i / 3f
       drawLine(Color.White.copy(alpha = alpha), Offset(x, top), Offset(x, top + side), strokeWidth = line)
       drawLine(Color.White.copy(alpha = alpha), Offset(left, y), Offset(left + side, y), strokeWidth = line)
+    }
+
+    previewColors?.takeIf { it.size == 9 }?.let { colors ->
+      val dotR = side / 12f
+      for (row in 0..2) {
+        for (col in 0..2) {
+          val cx = left + side * (col + 0.5f) / 3f
+          val cy = top + side * (row + 0.5f) / 3f
+          drawCircle(
+            color = CubeColorUi.swatch(colors[row * 3 + col]).copy(alpha = 0.88f),
+            radius = dotR,
+            center = Offset(cx, cy),
+          )
+        }
+      }
     }
   }
 }

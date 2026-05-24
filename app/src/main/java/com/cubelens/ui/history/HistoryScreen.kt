@@ -70,6 +70,7 @@ fun HistoryScreen(
   onDeleteAll: () -> Unit,
   modifier: Modifier = Modifier,
   onSettings: () -> Unit = {},
+  onReplaySolve: (SolveRecord) -> Unit = {},
 ) {
   var showDeleteAllDialog by remember { mutableStateOf(false) }
   var selectedRecord by remember { mutableStateOf<SolveRecord?>(null) }
@@ -222,6 +223,10 @@ fun HistoryScreen(
           onDelete(selectedRecord!!)
           selectedRecord = null
         },
+        onReplay = {
+          onReplaySolve(selectedRecord!!)
+          selectedRecord = null
+        },
       )
     }
   }
@@ -364,6 +369,7 @@ private fun HistoryDetailSheet(
   record: SolveRecord,
   onDismiss: () -> Unit,
   onDelete: () -> Unit,
+  onReplay: () -> Unit = {},
 ) {
   val context = LocalContext.current
   val dateFormat = remember { SimpleDateFormat("MMM dd yyyy, HH:mm:ss", Locale.getDefault()) }
@@ -429,6 +435,16 @@ private fun HistoryDetailSheet(
     }
 
     Spacer(Modifier.height(24.dp))
+
+    if (record.solution.isNotBlank() && record.moveCount > 0) {
+      Button(
+        onClick = onReplay,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Text(stringResource(R.string.history_detail_replay))
+      }
+      Spacer(Modifier.height(12.dp))
+    }
 
     Row(
       modifier = Modifier.fillMaxWidth(),

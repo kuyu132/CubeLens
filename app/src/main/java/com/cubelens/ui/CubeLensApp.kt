@@ -1,6 +1,7 @@
 package com.cubelens.ui
 
 import android.content.Context
+import androidx.camera.core.CameraSelector
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -11,7 +12,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -26,12 +29,15 @@ import com.cubelens.data.AppDatabase
 import com.cubelens.data.PreferencesManager
 import com.cubelens.data.SolveRecord
 import com.cubelens.ui.capture.CaptureScreen
+import com.cubelens.ui.capture.ManualInputScreen
 import com.cubelens.ui.history.HistoryScreen
 import com.cubelens.ui.onboarding.OnboardingScreen
 import com.cubelens.ui.review.ReviewScreen
+import com.cubelens.ui.settings.ColorCalibrationScreen
 import com.cubelens.ui.settings.SettingsScreen
 import com.cubelens.ui.solving.SolvingScreen
 import com.cubelens.ui.timer.TimerScreen
+import com.cubelens.util.ScrambleUtils
 import com.cubelens.viewmodel.CaptureViewModel
 import com.cubelens.viewmodel.SolveViewModel
 import kotlinx.coroutines.launch
@@ -46,9 +52,13 @@ fun CubeLensApp(
   val prefs = remember { PreferencesManager(context) }
   val scope = rememberCoroutineScope()
   val onboardingCompleted by prefs.onboardingCompleted.collectAsState(initial = null)
-  val lensFacing by prefs.cameraLensFacing.collectAsState(initial = 1)
+  val lensFacing by prefs.cameraLensFacing.collectAsState(
+    initial = CameraSelector.LENS_FACING_BACK,
+  )
 
-  // Wait for onboarding state
+  var timerInitialScramble by remember { mutableStateOf<String?>(null) }
+  var replaySolve by remember { mutableStateOf<ReplaySolveRequest?>(null) }
+
   if (onboardingCompleted == null) return
 
   val startDestination = if (onboardingCompleted == true) BottomTab.SOLVE.route else Routes.ONBOARDING
@@ -56,6 +66,21 @@ fun CubeLensApp(
   val db = remember { AppDatabase.getInstance(context) }
   val solveDao = remember { db.solveDao() }
   val historyRecords by solveDao.getAll().collectAsState(initial = emptyList())
+
+  fun resetSolveSession() {
+    captureViewModel.reset()
+    solveViewModel.reset()
+    replaySolve = null
+  }
+
+  fun openTimerWithScramble(scramble: String) {
+    timerInitialScramble = scramble
+    navController.navigate(BottomTab.TIMER.route) {
+      launchSingleTop = true
+      popUpTo(BottomTab.SOLVE.route) { saveState = true }
+      restoreState = true
+    }
+  }
 
   NavHost(navController = navController, startDestination = startDestination) {
     composable(Routes.ONBOARDING) {
@@ -82,10 +107,14 @@ fun CubeLensApp(
 
     composable(BottomTab.TIMER.route) {
       val inspectionEnabled by prefs.inspectionEnabled.collectAsStateWithLifecycle(initialValue = true)
+      val scrambleForTimer = timerInitialScramble
       TimerTabScreen(
         selectedTab = BottomTab.TIMER,
         onTabSelected = { tab -> navController.navigate(tab.route) { launchSingleTop = true } },
         inspectionEnabled = inspectionEnabled,
+        initialScramble = scrambleForTimer,
+        onInitialScrambleConsumed = { timerInitialScramble = null },
+        onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
         onSaveSolve = { scramble, timeMs, penalty ->
           scope.launch {
             solveDao.insert(
@@ -114,6 +143,28 @@ fun CubeLensApp(
           scope.launch { solveDao.deleteAll() }
         },
         onSettings = { navController.navigate(Routes.SETTINGS) },
+        onReplaySolve = { record ->
+          val facelets = ScrambleUtils.faceletsForSolveRecord(record.scramble, record.solution)
+            ?: return@HistoryTabScreen
+          replaySolve = ReplaySolveRequest(facelets, record.solution)
+          navController.navigate(Routes.SOLVING)
+        },
+      )
+    }
+
+    composable(Routes.MANUAL_INPUT) {
+      ManualInputScreen(
+        onBack = { navController.popBackStack() },
+        onApply = { facelets ->
+          if (captureViewModel.applyFacelets(facelets)) {
+            navController.navigate(Routes.REVIEW) {
+              popUpTo(BottomTab.SOLVE.route)
+            }
+            true
+          } else {
+            false
+          }
+        },
       )
     }
 
@@ -126,23 +177,53 @@ fun CubeLensApp(
     }
 
     composable(Routes.SOLVING) {
+      val replay = replaySolve
       SolvingScreen(
         captureViewModel = captureViewModel,
         solveViewModel = solveViewModel,
-        onBack = { navController.popBackStack() },
-        onSaveSolve = { scramble, solution, moveCount ->
-          scope.launch {
-            solveDao.insert(
-              SolveRecord(
-                scramble = scramble,
-                solution = solution,
-                moveCount = moveCount,
-                timeMs = 0L,
-                penalty = "",
-              ),
-            )
+        replayFacelets = replay?.facelets,
+        replaySolution = replay?.solution,
+        onBack = {
+          replaySolve = null
+          navController.popBackStack()
+        },
+        onSaveSolve = if (replay == null) {
+          { scramble, solution, moveCount ->
+            scope.launch {
+              solveDao.insert(
+                SolveRecord(
+                  scramble = scramble,
+                  solution = solution,
+                  moveCount = moveCount,
+                  timeMs = 0L,
+                  penalty = "",
+                ),
+              )
+            }
+          }
+        } else {
+          null
+        },
+        onStartTimer = if (replay == null) {
+          { scramble -> openTimerWithScramble(scramble) }
+        } else {
+          null
+        },
+        onFinished = {
+          resetSolveSession()
+          if (replay != null) {
+            navController.popBackStack()
+          } else {
+            navController.popBackStack(Routes.REVIEW, inclusive = true)
           }
         },
+      )
+    }
+
+    composable(Routes.COLOR_CALIBRATION) {
+      ColorCalibrationScreen(
+        prefs = prefs,
+        onBack = { navController.popBackStack() },
       )
     }
 
@@ -150,6 +231,7 @@ fun CubeLensApp(
       SettingsScreen(
         prefs = prefs,
         onBack = { navController.popBackStack() },
+        onColorCalibration = { navController.navigate(Routes.COLOR_CALIBRATION) },
         onReplayOnboarding = {
           scope.launch {
             prefs.setOnboardingCompleted(false)
@@ -162,6 +244,8 @@ fun CubeLensApp(
           scope.launch {
             solveDao.deleteAll()
             prefs.setOnboardingCompleted(false)
+            resetSolveSession()
+            timerInitialScramble = null
             navController.navigate(Routes.ONBOARDING) {
               popUpTo(0) { inclusive = true }
             }
@@ -171,6 +255,11 @@ fun CubeLensApp(
     }
   }
 }
+
+private data class ReplaySolveRequest(
+  val facelets: String,
+  val solution: String,
+)
 
 @Composable
 private fun MainTabScreen(
@@ -190,6 +279,7 @@ private fun MainTabScreen(
       viewModel = captureViewModel,
       onReview = { navController.navigate(Routes.REVIEW) },
       onNavigateToSettings = onNavigateToSettings,
+      onManualInput = { navController.navigate(Routes.MANUAL_INPUT) },
       modifier = Modifier.padding(innerPadding),
       lensFacing = lensFacing,
     )
@@ -202,6 +292,9 @@ private fun TimerTabScreen(
   selectedTab: BottomTab,
   onTabSelected: (BottomTab) -> Unit,
   inspectionEnabled: Boolean,
+  initialScramble: String?,
+  onInitialScrambleConsumed: () -> Unit,
+  onNavigateToSettings: () -> Unit,
   onSaveSolve: (String, Long, String) -> Unit,
 ) {
   Scaffold(
@@ -211,6 +304,9 @@ private fun TimerTabScreen(
   ) { innerPadding ->
     TimerScreen(
       inspectionEnabled = inspectionEnabled,
+      initialScramble = initialScramble,
+      onInitialScrambleConsumed = onInitialScrambleConsumed,
+      onNavigateToSettings = onNavigateToSettings,
       onSaveSolve = onSaveSolve,
       modifier = Modifier.padding(innerPadding),
     )
@@ -226,6 +322,7 @@ private fun HistoryTabScreen(
   onDelete: (SolveRecord) -> Unit,
   onDeleteAll: () -> Unit,
   onSettings: () -> Unit,
+  onReplaySolve: (SolveRecord) -> Unit,
 ) {
   Scaffold(
     bottomBar = {
@@ -238,6 +335,7 @@ private fun HistoryTabScreen(
       onDeleteAll = onDeleteAll,
       modifier = Modifier.padding(innerPadding),
       onSettings = onSettings,
+      onReplaySolve = onReplaySolve,
     )
   }
 }
@@ -266,6 +364,8 @@ private fun CubeLensNavBar(
 
 private object Routes {
   const val ONBOARDING = "onboarding"
+  const val MANUAL_INPUT = "manual_input"
+  const val COLOR_CALIBRATION = "color_calibration"
   const val REVIEW = "review"
   const val SOLVING = "solving"
   const val SETTINGS = "settings"

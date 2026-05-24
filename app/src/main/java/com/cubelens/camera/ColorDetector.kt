@@ -10,9 +10,14 @@ import kotlin.math.max
 import kotlin.math.min
 
 class ColorDetector {
-  fun detectFace(face: CubeFace, bitmap: Bitmap, imagePath: String?): FaceScan {
+  fun detectFace(
+    face: CubeFace,
+    bitmap: Bitmap,
+    imagePath: String?,
+    calibration: ColorCalibration = ColorCalibration.DEFAULT,
+  ): FaceScan {
     val square = centerCropSquare(bitmap)
-    val (colors, confidences) = sample3x3(square)
+    val (colors, confidences) = sample3x3(square, calibration)
     return FaceScan(face = face, colors = colors, confidences = confidences, imagePath = imagePath)
   }
 
@@ -23,7 +28,7 @@ class ColorDetector {
     return Bitmap.createBitmap(src, x, y, size, size)
   }
 
-  private fun sample3x3(bitmap: Bitmap): Pair<List<CubeColor>, List<Float>> {
+  private fun sample3x3(bitmap: Bitmap, calibration: ColorCalibration): Pair<List<CubeColor>, List<Float>> {
     val w = bitmap.width
     val h = bitmap.height
     val padding = (w * 0.08f).toInt()  // tighter padding since we sample regions
@@ -56,6 +61,7 @@ class ColorDetector {
         sat = s[1],
         v = s[2],
         adaptiveWhiteV = adaptiveWhiteV,
+        calibration = calibration,
       )
       colors.add(result.first)
       conf.add(result.second)
@@ -100,10 +106,17 @@ class ColorDetector {
     return Triple(hues[count / 2], sats[count / 2], vals[count / 2])
   }
 
-  private fun classify(h: Float, sat: Float, v: Float, adaptiveWhiteV: Float): Pair<CubeColor, Float> {
+  private fun classify(
+    h: Float,
+    sat: Float,
+    v: Float,
+    adaptiveWhiteV: Float,
+    calibration: ColorCalibration,
+  ): Pair<CubeColor, Float> {
+    val whiteSatMax = calibration.whiteSatMax.coerceIn(0.08f, 0.35f)
     // 1) White (robust under warm/cool lighting)
-    if (sat < 0.20f && v > adaptiveWhiteV) {
-      val sScore = 1f - (sat / 0.20f).coerceIn(0f, 1f)
+    if (sat < whiteSatMax && v > adaptiveWhiteV) {
+      val sScore = 1f - (sat / whiteSatMax).coerceIn(0f, 1f)
       val vScore = ((v - adaptiveWhiteV) / (1f - adaptiveWhiteV)).coerceIn(0f, 1f)
       return CubeColor.WHITE to (0.55f * sScore + 0.45f * vScore)
     }
@@ -113,7 +126,7 @@ class ColorDetector {
       return CubeColor.UNKNOWN to 0.1f
     }
 
-    val hue = normalizeHue(h)
+    val hue = normalizeHue(h + calibration.hueOffsetDeg)
 
     fun inRange(start: Float, end: Float): Boolean = hue >= start && hue <= end
 

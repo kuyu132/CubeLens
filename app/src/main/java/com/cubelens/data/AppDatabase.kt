@@ -29,7 +29,6 @@ abstract class AppDatabase : RoomDatabase() {
           "cubelens.db",
         )
           .addMigrations(MIGRATION_1_2)
-          .fallbackToDestructiveMigration()
           .build().also { instance = it }
       }
   }

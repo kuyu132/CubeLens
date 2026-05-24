@@ -16,6 +16,15 @@
   <string name="capture_review">Review</string>
   <string name="capture_progress">%1$d/6 captured</string>
   <string name="capture_detect_failed">Color detection failed. Try again.</string>
+  <string name="capture_photo_failed">Failed to capture photo. Please try again.</string>
+  <string name="capture_gallery">Gallery</string>
+  <string name="capture_gallery_failed">Could not load image from gallery.</string>
+  <string name="capture_manual_input">Manual input</string>
+
+  <string name="manual_input_title">Manual cube state</string>
+  <string name="manual_input_hint">Enter 54 facelet characters (U R F D L B centers). Each letter must appear exactly 9 times.</string>
+  <string name="manual_input_apply">Apply &amp; review</string>
+  <string name="manual_input_invalid">Invalid cube state. Check that you have 54 valid facelets.</string>
 
   <string name="review_title">Review</string>
   <string name="review_hint">Tap a sticker to cycle colors. Low-confidence stickers are outlined.</string>
@@ -39,7 +48,8 @@
   <string name="solving_save_body">Record this solution with %1$d moves?</string>
   <string name="solving_save_confirm">Save</string>
   <string name="solving_save_cancel">Cancel</string>
-  <string name="solving_share_text">🧊 %1$s\nScramble: %2$s\nSolution: %3$s (%4$d moves)\nTime: --</string>
+  <string name="solving_start_timer">Start timer</string>
+  <string name="solving_share_text">🧊 %1$s\nScramble: %2$s\nSolution: %3$s (%4$d moves)</string>
   <string name="solving_share_chooser">Share solution</string>
 
   <string name="history_title">History</string>
@@ -67,8 +77,14 @@
   <string name="history_detail_share">Share</string>
   <string name="history_detail_close">Close</string>
   <string name="history_detail_copied">Copied to clipboard</string>
+  <string name="history_detail_replay">Replay solution</string>
 
   <string name="timer_title">Timer</string>
+  <string name="timer_hold_to_start">Hold anywhere to start</string>
+  <string name="timer_release_to_start">Release to start</string>
+  <string name="timer_release_to_solve">Release to start solve</string>
+  <string name="timer_touch_to_stop">Touch to stop</string>
+  <string name="timer_inspection_plus2_applied">+2 from inspection (started after 15 s)</string>
   <string name="timer_start">Start</string>
   <string name="timer_stop">Stop</string>
   <string name="timer_save">Save</string>
@@ -120,6 +136,18 @@
   <string name="settings_camera_default">Default lens</string>
   <string name="settings_camera_back">Back camera</string>
   <string name="settings_camera_front">Front camera</string>
+  <string name="settings_color_calibration">Color calibration</string>
+  <string name="settings_color_calibration_sub">Tune hue shift and white detection for your lighting and cube.</string>
+  <string name="settings_calibration_open">Calibrate</string>
+
+  <string name="calibration_title">Color calibration</string>
+  <string name="calibration_hint">Adjust if stickers are misread under your room lighting. Changes apply to live preview and capture.</string>
+  <string name="calibration_hue_offset">Hue shift: %1$d°</string>
+  <string name="calibration_hue_hint">Positive = rotate color ranges clockwise (helps warm/yellow light).</string>
+  <string name="calibration_white_sat">White sensitivity: %1$d%%</string>
+  <string name="calibration_white_hint">Lower = only very gray stickers count as white.</string>
+  <string name="calibration_reset">Reset to default</string>
+  <string name="calibration_done">Done</string>
   <string name="settings_data">Data</string>
   <string name="settings_clear_all_data">Clear All Data</string>
   <string name="settings_clear_all_data_sub">This will delete all solve history and reset preferences.</string>

@@ -5,14 +5,19 @@ import android.graphics.Bitmap
 import com.cubelens.R
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.cubelens.camera.ColorCalibration
 import com.cubelens.camera.ColorDetector
+import com.cubelens.data.PreferencesManager
 import com.cubelens.model.CubeColor
 import com.cubelens.model.CubeFace
 import com.cubelens.model.FaceScan
+import com.cubelens.util.FaceletsLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -30,7 +35,14 @@ data class CaptureUiState(
 }
 
 class CaptureViewModel(app: Application) : AndroidViewModel(app) {
+  private val prefs = PreferencesManager(app)
   private val colorDetector = ColorDetector()
+
+  val colorCalibration: StateFlow<ColorCalibration> = prefs.colorCalibration.stateIn(
+    scope = viewModelScope,
+    started = SharingStarted.WhileSubscribed(5_000),
+    initialValue = ColorCalibration.DEFAULT,
+  )
 
   private val _uiState = MutableStateFlow(CaptureUiState())
   val uiState: StateFlow<CaptureUiState> = _uiState.asStateFlow()
@@ -39,11 +51,29 @@ class CaptureViewModel(app: Application) : AndroidViewModel(app) {
     _uiState.value = CaptureUiState()
   }
 
+  /** Load all six faces from a 54-character facelets string (URFDLB centers). */
+  fun applyFacelets(facelets: String): Boolean {
+    val scans = FaceletsLoader.scansFromFacelets(facelets) ?: return false
+    _uiState.value = CaptureUiState(
+      scans = scans,
+      scanHistory = scans.keys.toList(),
+      currentFaceIndex = CaptureUiState().faceOrder.lastIndex,
+      message = null,
+    )
+    return true
+  }
+
   fun setCapturedFaceBitmap(face: CubeFace, bitmap: Bitmap, imagePath: String?) {
     viewModelScope.launch(Dispatchers.Default) {
       _uiState.update { it.copy(isProcessing = true, message = null) }
+      val calibration = colorCalibration.value
       val scan = try {
-        colorDetector.detectFace(face = face, bitmap = bitmap, imagePath = imagePath)
+        colorDetector.detectFace(
+          face = face,
+          bitmap = bitmap,
+          imagePath = imagePath,
+          calibration = calibration,
+        )
       } catch (t: Throwable) {
         null
       }

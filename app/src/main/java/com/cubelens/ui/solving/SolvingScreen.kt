@@ -53,6 +53,7 @@ import com.cubelens.model.FaceScan
 import com.cubelens.solver.CubeState
 import com.cubelens.solver.Move
 import com.cubelens.ui.util.CubeColorUi
+import com.cubelens.util.ScrambleUtils
 import com.cubelens.viewmodel.CaptureViewModel
 import com.cubelens.viewmodel.SolveViewModel
 import kotlin.math.cos
@@ -66,29 +67,47 @@ fun SolvingScreen(
     solveViewModel: SolveViewModel,
     onBack: () -> Unit,
     onSaveSolve: ((scramble: String, solution: String, moveCount: Int) -> Unit)? = null,
+    replayFacelets: String? = null,
+    replaySolution: String? = null,
+    onStartTimer: ((scramble: String) -> Unit)? = null,
+    onFinished: (() -> Unit)? = null,
 ) {
     val captureState by captureViewModel.uiState.collectAsStateWithLifecycle()
     val solveState by solveViewModel.uiState.collectAsStateWithLifecycle()
     val onBackLatest by rememberUpdatedState(onBack)
     val context = LocalContext.current
+    val isReplay = replaySolution != null
 
     var showSaveDialog by remember { mutableStateOf(false) }
+    var saveDialogShown by remember(replayFacelets, replaySolution) { mutableStateOf(false) }
 
-    val facelets = remember(captureState.faceOrder, captureState.scans) {
+    val facelets = replayFacelets ?: remember(captureState.faceOrder, captureState.scans) {
         faceletsFromScans(faceOrder = captureState.faceOrder, scans = captureState.scans)
     }
 
-    LaunchedEffect(facelets) {
-        if (facelets != null) solveViewModel.solve(facelets)
+    LaunchedEffect(facelets, replaySolution) {
+        if (facelets == null) return@LaunchedEffect
+        if (replaySolution != null) {
+            solveViewModel.loadSolution(replaySolution)
+        } else {
+            solveViewModel.solve(facelets)
+        }
     }
 
-    // Monitor when user reaches last step
+    // Offer save when user reaches the last step (new solves only)
     val result = solveState.result
     val total = result?.moves?.size ?: 0
-    LaunchedEffect(solveState.currentStep, total) {
-        if (total > 0 && solveState.currentStep >= total - 1 && !solveState.isPlaying) {
-            // User has watched all steps
+    LaunchedEffect(solveState.currentStep, total, isReplay) {
+        if (
+            !isReplay &&
+            onSaveSolve != null &&
+            total > 0 &&
+            solveState.currentStep >= total - 1 &&
+            !solveState.isPlaying &&
+            !saveDialogShown
+        ) {
             showSaveDialog = true
+            saveDialogShown = true
         }
     }
 
@@ -106,7 +125,11 @@ fun SolvingScreen(
                         TextButton(
                             onClick = {
                                 val movesJoined = result.moves.joinToString(" ")
-                                val scramble = facelets ?: ""
+                                val scramble = if (movesJoined.isNotBlank()) {
+                                    ScrambleUtils.solutionToScramble(movesJoined)
+                                } else {
+                                    facelets ?: ""
+                                }
                                 val moveCount = result.moves.size
                                 val shareText = context.getString(
                                     R.string.solving_share_text,
@@ -278,6 +301,10 @@ fun SolvingScreen(
 
     // Save dialog when user reaches last step
     if (showSaveDialog && onSaveSolve != null) {
+        val movesText = result?.moves?.joinToString(" ") ?: ""
+        val moveCount = result?.moves?.size ?: 0
+        val wcaScramble = if (movesText.isNotBlank()) ScrambleUtils.solutionToScramble(movesText) else ""
+
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
             title = { Text(stringResource(R.string.solving_save_title)) },
@@ -285,20 +312,32 @@ fun SolvingScreen(
                 Text(
                     stringResource(
                         R.string.solving_save_body,
-                        result?.moves?.size ?: 0,
+                        moveCount,
                     ),
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        val movesText = result?.moves?.joinToString(" ") ?: ""
-                        val moveCount = result?.moves?.size ?: 0
-                        onSaveSolve.invoke(facelets ?: "", movesText, moveCount)
-                        showSaveDialog = false
-                    },
-                ) {
-                    Text(stringResource(R.string.solving_save_confirm))
+                Row {
+                    TextButton(
+                        onClick = {
+                            onSaveSolve.invoke(wcaScramble, movesText, moveCount)
+                            showSaveDialog = false
+                            onFinished?.invoke()
+                        },
+                    ) {
+                        Text(stringResource(R.string.solving_save_confirm))
+                    }
+                    if (onStartTimer != null && wcaScramble.isNotBlank()) {
+                        TextButton(
+                            onClick = {
+                                showSaveDialog = false
+                                onStartTimer.invoke(wcaScramble)
+                                onFinished?.invoke()
+                            },
+                        ) {
+                            Text(stringResource(R.string.solving_start_timer))
+                        }
+                    }
                 }
             },
             dismissButton = {
